@@ -1,6 +1,6 @@
 ---
 title: CloudAlert Triage AI
-emoji:
+emoji: cloud
 colorFrom: blue
 colorTo: purple
 sdk: docker
