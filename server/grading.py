@@ -128,7 +128,7 @@ def _severity_accuracy(decisions_by_id, ground_truth) -> float:
             agent_rank = SEVERITY_ORDER.get(agent_sev, 2)
             true_rank = SEVERITY_ORDER.get(true_sev, 2)
             if abs(agent_rank - true_rank) == 1:
-                total += 0.3  # stricter than before
+                total += 0.15  # within 1 level = partial credit
 
     return total / len(ground_truth)
 

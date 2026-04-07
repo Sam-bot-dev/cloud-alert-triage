@@ -155,9 +155,9 @@ class TestRewardTriage:
 
     def test_severity_within_one_level_partial_credit(self):
         """
-        true=high(1), agent=medium(2), diff=1 -> +0.30 (not +0.10).
-        root_cause correct (+0.30) + severity partial (+0.30) + remediation (+0.20)
-        = 0.80
+        true=high(1), agent=medium(2), diff=1 -> +0.15 (not +0.10).
+        root_cause correct (+0.30) + severity partial (+0.15) + remediation (+0.20)
+        = 0.65
         """
         action = {
             "action_type": "triage",
@@ -167,7 +167,7 @@ class TestRewardTriage:
             "remediation": "scale_up",               # correct
         }
         result = _reward_triage(action, GT_BASIC, ENV_EARLY)
-        assert result == pytest.approx(0.80)
+        assert result == pytest.approx(0.65)
 
     def test_severity_off_by_two_no_partial_credit(self):
         """
@@ -232,9 +232,9 @@ class TestRewardTriage:
 
     def test_severity_within_one_level_critical_to_high(self):
         """
-        true=critical(0), agent=high(1), diff=1 -> +0.30 partial.
+        true=critical(0), agent=high(1), diff=1 -> +0.15 partial.
         true remediation correct -> +0.20. root_cause correct -> +0.30.
-        = 0.80
+        = 0.65
         """
         action = {
             "action_type": "triage",
@@ -244,7 +244,7 @@ class TestRewardTriage:
             "remediation": "rollback_deploy",   # correct
         }
         result = _reward_triage(action, GT_BASIC, ENV_EARLY)
-        assert result == pytest.approx(0.80)
+        assert result == pytest.approx(0.65)
 
     def test_unknown_alert_id_returns_zero(self):
         """No matching GT entry -> 0.0 (can't score)."""
@@ -560,8 +560,8 @@ class TestComputeReward:
 
     def test_partial_triage_severity_off_by_one(self):
         """
-        root_cause correct (+0.30) + severity partial (+0.30) + remediation (+0.20)
-        = 0.80, step=1 -> no budget pressure.
+        root_cause correct (+0.30) + severity partial (+0.15) + remediation (+0.20)
+        = 0.65, step=1 -> no budget pressure.
         """
         action = {
             "action_type": "triage",
@@ -571,7 +571,7 @@ class TestComputeReward:
             "remediation": "scale_up",
         }
         result = compute_reward(action, GT_BASIC, ENV_EARLY)
-        assert result == pytest.approx(0.80)
+        assert result == pytest.approx(0.65)
 
     def test_skip_false_alarm_no_budget_pressure(self):
         """Skip true false_alarm + step=1 -> +0.20."""
@@ -703,8 +703,8 @@ class TestMasterPlanExamples:
     def test_example2_partial_triage_severity_off_by_one(self):
         """
         Master plan Example 2 (Step 1):
-        root_cause correct (+0.30) + severity within 1 (+0.30) + remediation (+0.20)
-        = 0.80
+        root_cause correct (+0.30) + severity within 1 (+0.15) + remediation (+0.20)
+        = 0.65
         """
         env_step0 = {**ENV_EARLY, "step_number": 0}
         action = {
@@ -715,7 +715,7 @@ class TestMasterPlanExamples:
             "remediation": "scale_up",              # correct
         }
         result = compute_reward(action, GT_BASIC, env_step0)
-        assert result == pytest.approx(0.80)
+        assert result == pytest.approx(0.65)
 
     def test_example2_link_correct_pair(self):
         """

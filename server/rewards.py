@@ -144,7 +144,7 @@ def _reward_triage(
         true_rank = SEVERITY_ORDER.get(true_sev, -99)
         if agent_rank != -99 and true_rank != -99:
             if abs(agent_rank - true_rank) == 1:
-                reward += 0.30
+                reward += 0.15
 
     # -- remediation ----------------------------------------------------------
     if action_dict.get("remediation") == gt["true_remediation"]:

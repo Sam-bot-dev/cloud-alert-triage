@@ -93,7 +93,7 @@ class TestEasyGrader:
             assert 0.0 <= score <= 1.0
 
     def test_severity_partial_credit(self):
-        """Severity off by exactly 1 level → 0.3 partial credit per alert."""
+        """Severity off by exactly 1 level → 0.15 partial credit per alert."""
         # "high" → "medium" is off by 1 (SEVERITY_ORDER: critical=0, high=1, medium=2, low=3)
         decisions = [
             {"alert_id": f"alert-{i:03d}", "action_type": "triage",
@@ -102,9 +102,9 @@ class TestEasyGrader:
         ]
         state = _make_state("easy", decisions, GROUND_TRUTH_5)
         score = grade_episode("easy", state)
-        # rc=1.0, sev=0.3, rem=1.0 (coverage=1.0, no penalty)
-        # 0.40*1.0 + 0.30*0.3 + 0.30*1.0 = 0.40 + 0.09 + 0.30 = 0.79
-        assert score == pytest.approx(0.79)
+        # rc=1.0, sev=0.15, rem=1.0 (coverage=1.0, no penalty)
+        # 0.40*1.0 + 0.30*0.15 + 0.30*1.0 = 0.40 + 0.045 + 0.30 = 0.745
+        assert score == pytest.approx(0.745)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

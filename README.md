@@ -160,7 +160,8 @@ Rewards are issued **per step** to guide the agent. The final grader score is co
 |---|---|---|
 | `triage` | `root_cause` exact match | +0.30 |
 | `triage` | `severity` exact match | +0.30 |
-| `triage` | `severity` within 1 level | +0.30 |
+| `triage` | `severity` exact match | +0.30 |
+| `triage` | `severity` within 1 level | +0.15 |
 | `triage` | `remediation` exact match | +0.20 |
 | `triage` | alert is in an incident the agent already linked correctly | +0.10 bonus |
 | `link_alerts` | correct pair (both alerts in same true incident) | +0.15 per pair |
@@ -208,10 +209,10 @@ The grader computes a deterministic score in **[0.0, 1.0]** from the final episo
 ### Accuracy definitions
 
 - **root_cause_accuracy** — fraction of alerts with correct root cause
-- **severity_accuracy** — per alert: +1.0 exact, +0.3 within 1 level, +0.0 otherwise; averaged
+- **severity_accuracy** — per alert: +1.0 exact, +0.15 within 1 level, +0.0 otherwise; averaged
 - **remediation_accuracy** — fraction of alerts with correct remediation
 - **incident_link_f1** — F1 over alert-pair sets; 1.0 if no true incidents (vacuously correct)
-- **false_alarm_accuracy** — (correctly skipped FAs + correctly triaged real alerts) / total; 1.0 if no FAs
+- **false_alarm_accuracy** — (correctly skipped FAs + correctly triaged real alerts) / total; 1.0 if no FAs. Includes a skip-ratio penalty: if >50% of alerts are skipped, the score is reduced proportionally (penalty = 1 - skip_ratio * 0.5).
 - **stealth bonus** — +0.05 if the root cause service of the stealth incident was correctly identified
 - **Coverage Penalty** — The total accumulated score is multiplied by `coverage ^ 1.5` before the final stealth bonus is assigned. This strictly penalizes agents that ignore alerts to protect a partial high score.
 
@@ -290,10 +291,11 @@ python inference.py
 | Variable | Default | Description |
 |---|---|---|
 | `ENV_URL` | `http://localhost:7860` | URL of the running environment server |
-| `API_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
-| `MODEL_NAME` | `gpt-4o-mini` | Model name |
-| `HF_TOKEN` | — | Primary API key (Hugging Face token) |
-| `OPENAI_API_KEY` | — | Fallback API key (used if `HF_TOKEN` is not set) |
+| `API_BASE_URL` | `https://api.groq.com/openai/v1` | OpenAI-compatible API base URL |
+| `MODEL_NAME` | `llama-3.3-70b-versatile` | Model name |
+| `GROQ_API_KEY` | — | Groq API key (recommended for free tier) |
+| `OPENAI_API_KEY` | — | OpenAI API key (fallback) |
+| `HF_TOKEN` | — | HuggingFace token (fallback) |
 
 ### Docker
 
@@ -317,17 +319,36 @@ curl -s -X POST http://localhost:7860/reset \
 pytest tests/ -v
 ```
 
+### Live Demo
+
+Try the API at: **https://notUbaid-cloudalert-triage-ai.hf.space**
+
+```bash
+# Health check
+curl https://notUbaid-cloudalert-triage-ai.hf.space/health
+
+# Reset easy task
+curl -X POST https://notUbaid-cloudalert-triage-ai.hf.space/reset \
+  -H "Content-Type: application/json" \
+  -d '{"task_id": "easy", "seed": 42}'
+
+# Step (triage an alert)
+curl -X POST https://notUbaid-cloudalert-triage-ai.hf.space/step \
+  -H "Content-Type: application/json" \
+  -d '{"action_type": "triage", "alert_id": "alert-001", "root_cause": "resource_exhaustion", "severity": "high", "remediation": "scale_up"}'
+```
+
 ---
 
 ## Baseline Scores
 
-Scores recorded with `seed=42`, `temperature=0`.
+Scores recorded with `seed=42`, `temperature=0`, `MODEL_NAME=llama-3.3-70b-versatile`, `API_BASE_URL=https://api.groq.com/openai/v1`.
 
 | Task | Model | Grader Score | Steps Used |
 |---|---|---|---|
-| easy | _pending live run_ | — | — |
-| medium | _pending live run_ | — | — |
-| hard | _pending live run_ | — | — |
+| easy | llama-3.3-70b-versatile | 0.772 | 6 |
+| medium | llama-3.3-70b-versatile | 0.5915 | 25 |
+| hard | llama-3.3-70b-versatile | 0.3154 | 45 |
 
 > **Expected ranges** (strong frontier LLM): easy 0.85–1.0 · medium 0.65–0.85 · hard 0.40–0.65
 

@@ -31,8 +31,12 @@ tasks:
     description: Triage 30 alerts with 5 cascading incidents, noise, and misleading severity.
 
 # Keep minimal for compatibility
-action_space: {}
-observation_space: {}
+action_space:
+  type: object
+  description: "Discriminated union on action_type: triage | link_alerts | skip"
+observation_space:
+  type: object
+  description: "alerts list, service_map adjacency dict, pending_count, step_number, max_steps, feedback"
 
 endpoints:
   reset: /reset

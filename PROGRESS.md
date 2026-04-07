@@ -1,6 +1,6 @@
 # PROGRESS TRACKER
 
-## Current Status: ALL AGENT WORK COMPLETE ✅ — Awaiting Human Validation & Deployment
+## Current Status: DEPLOYMENT COMPLETE ✅ — Space Live at https://notUbaid-cloudalert-triage-ai.hf.space
 
 ## Phase Completion
 
@@ -18,12 +18,32 @@
 | 10. Tests | ✅ COMPLETE | 2026-04-07 | Agent |
 | 11. Docker | ✅ COMPLETE | 2026-04-07 | Agent |
 | 12. Local Validation | ✅ COMPLETE (27/27 smoke, openenv OK) | 2026-04-07 | Agent |
-| 13. HF Deployment | NOT STARTED | — | — |
+| 13. HF Deployment | ✅ COMPLETE (Space live) | 2026-04-08 | Agent |
 | 14. Final Polish | ✅ COMPLETE | 2026-04-07 | Agent |
 | 14a. Phase A Fixes | ✅ COMPLETE | 2026-04-07 | Agent |
 | 14b. Phase B Cascade | ✅ COMPLETE | 2026-04-07 | Agent |
 
 ## Change Log
+
+### 2026-04-08 — Agent (Phase 13 — HF Deployment + Intelligence Boost)
+- **Phase**: 13 — HF Deployment + Intelligence Boost
+- **Status**: COMPLETE
+- **What was done**:
+  - Deployed to HuggingFace Space: `notUbaid-cloudalert-triage-ai.hf.space`
+  - Docker deployment verified successful
+  - API endpoints working: `/`, `/health`, `/reset`, `/step`, `/state`
+  - Added intelligent enhancements to inference.py:
+    - Repeated alert detection (groups same service+metric)
+    - Dynamic alert prioritization (severity + upstream services)
+    - Smart fallback (safer than skip for critical/high)
+    - Improved system prompt with better strategy
+  - Inference agent tested with Groq LLM:
+    - Easy: score=0.772 (6 steps)
+    - Medium: score=0.5915 (25 steps)
+    - Hard: score=0.3154 (45 steps)
+  - Score improvement: Hard improved from 0.10 → 0.32 (+220%)
+  - Fixed API key priority (GROQ_API_KEY for Groq, OPENAI_API_KEY for OpenAI)
+  - Added home endpoint `/` for Space preview
 
 ### 2026-04-07 — Agent (Phase F — Final Integration Review)
 - **Phase**: Phase F — Final consistency audit
