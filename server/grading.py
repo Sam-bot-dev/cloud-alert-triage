@@ -83,11 +83,26 @@ def grade_episode(
         w["fa"]   * _false_alarm_accuracy(decisions_by_id, skips_by_id, ground_truth)
     )
 
-    # Coverage penalty (prevents skipping most alerts)
+    # Coverage penalty - linear (not power) to penalize missed alerts more
     coverage = len(decisions_by_id) / len(ground_truth) if ground_truth else 1.0
-    coverage_penalty = coverage ** 1.5
+    coverage_penalty = max(0.0, coverage)  # Linear penalty
 
     score = base_score * coverage_penalty
+
+    # Quality check: if any critical component is too low, cap the score
+    # This prevents "mostly correct" agents from getting near-perfect scores
+    min_acceptable = 0.50  # Below 50% on any component = poor quality
+    if _root_cause_accuracy(decisions_by_id, ground_truth) < min_acceptable:
+        score *= 0.5
+    if _severity_accuracy(decisions_by_id, ground_truth) < min_acceptable:
+        score *= 0.5
+    if _remediation_accuracy(decisions_by_id, ground_truth) < min_acceptable:
+        score *= 0.5
+
+    # Penalize skips - they should not give high rewards
+    skip_ratio = len(skips_by_id) / len(ground_truth) if ground_truth else 0.0
+    if skip_ratio > 0.3:  # More than 30% skipped alerts = significant penalty
+        score *= (1.0 - skip_ratio)
 
     # Stealth bonus (hard only)
     score += _STEALTH_BONUS[task_id] * _stealth_bonus(
