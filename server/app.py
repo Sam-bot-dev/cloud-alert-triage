@@ -120,7 +120,7 @@ async def list_tasks() -> list[dict[str, Any]]:
 
 
 @app.post("/reset", summary="Start a new episode")
-async def reset(body: ResetRequest) -> dict[str, Any]:
+async def reset(body: ResetRequest | None = None) -> dict[str, Any]:
     """
     Initialise a new episode (discards any in-progress episode).
 
@@ -130,6 +130,8 @@ async def reset(body: ResetRequest) -> dict[str, Any]:
         "task_id": "easy" | "medium" | "hard",
         "seed":    int
     }
+
+    (Optional - defaults to task_id="easy", seed=42 if not provided)
 
     Response
     --------
@@ -141,7 +143,9 @@ async def reset(body: ResetRequest) -> dict[str, Any]:
     ------
     422  unknown task_id
     """
-    observation = env.reset(body.task_id, body.seed)
+    task_id = body.task_id if body else "easy"
+    seed = body.seed if body else 42
+    observation = env.reset(task_id, seed)
     return {"observation": observation.model_dump()}
 
 

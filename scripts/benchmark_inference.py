@@ -37,7 +37,7 @@ def start_server() -> subprocess.Popen:
     return proc
 
 def run_inference(task: str, seed: int, api_key: str) -> Dict[str, float]:
-    """Run inference.py for single task, parse [END] line for score."""
+    """Run inference.py for single task, parse [SCORE] line for grader_score from stderr."""
     env = os.environ.copy()
     env["TASK_ID"] = task
     env["SEED"] = str(seed)
@@ -45,26 +45,21 @@ def run_inference(task: str, seed: int, api_key: str) -> Dict[str, float]:
         env[API_KEY_VAR] = api_key
     env["ENV_URL"] = "http://localhost:7860"
 
-    # Modify inference.py temporarily for single-task if needed
-    orig_inference = "inference.py"
-    single_inference = f"{orig_inference}.single"
-    
     proc = subprocess.run(
-        ["python", orig_inference],
-        cwd="cloud-alert-triage",
+        ["python", "inference.py"],
         env=env,
         capture_output=True,
         text=True,
         timeout=300
     )
     
-    # Parse logs for [END] score
-    score_match = re.search(r'\[END\].*score=([\d.]+)', proc.stdout)
-    steps_match = re.search(r'\[END\].*steps=(\d+)', proc.stdout)
+    # Parse logs for [SCORE] grader_score from stderr
+    score_match = re.search(r'\[SCORE\].*grader_score=([\d.]+)', proc.stderr)
+    steps_match = re.search(r'\[END\].*steps=(\d+)', proc.stderr)
     
     if score_match:
         return {"score": float(score_match.group(1)), "steps": int(steps_match.group(1)) if steps_match else 0}
-    raise ValueError(f"No score in output: {proc.stdout[-500:]}")
+    raise ValueError(f"No score in output: {proc.stderr[-500:]}")
 
 def main():
     tasks = [sys.argv[1]] if len(sys.argv) > 1 else DEFAULT_TASKS
