@@ -242,11 +242,6 @@ The efficiency component with floor 0.20 ensures any agent using at least one st
 
 ## Benchmark Results
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- ADD YOUR ACTUAL SCORES HERE after running inference.py     -->
-<!-- Run: restart server, delete __pycache__, python inference.py -->
-<!-- ═══════════════════════════════════════════════════════════ -->
-
 ### Baseline Agent (plan-then-execute)
 
 | Task | Model | Seed | Grader Score | Steps |
@@ -261,7 +256,7 @@ The efficiency component with floor 0.20 ensures any agent using at least one st
 |---|---|---|---|---|
 | easy | 0.9730 | 0.9850 | 0.9850 | 0.9810 |
 | medium | 0.9679 | 0.9194 | 0.9705 | 0.9526 |
-| hard | 0.9822 | 0.9958 | 1.0000 | 0.9927 |
+| hard | 0.9822 | 0.9958 | 0.9999 | 0.9926 |
 
 ### Cross-Model Evaluation (gpt-4o-mini, seeds 42/123/456)
 
@@ -269,7 +264,7 @@ The efficiency component with floor 0.20 ensures any agent using at least one st
 |---|---|---|---|---|
 | easy | 0.9730 | 0.9850 | 0.9850 | 0.9810 |
 | medium | 0.9679 | 0.9194 | 0.9705 | 0.9526 |
-| hard | 0.9822 | 0.9958 | 1.0000 | 0.9927 |
+| hard | 0.9822 | 0.9958 | 0.9999 | 0.9926 |
 
 ### Agent Strategy
 

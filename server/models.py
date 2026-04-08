@@ -190,6 +190,7 @@ class EnvironmentState(BaseModel):
     cumulative_reward: float
     grader_score: float | None = None      # populated at episode end
     dynamic_alert_ids: set[str] = set()    # inserted in Phase B
+    triage_order: list[str] = []           # order in which alerts were triaged/skipped
 
 
 # ---------------------------------------------------------------------------

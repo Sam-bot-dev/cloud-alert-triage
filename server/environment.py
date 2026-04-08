@@ -103,6 +103,8 @@ class AlertTriageEnv:
         self._done: bool = False
         self._cumulative_reward: float = 0.0
         self._grader_score: float | None = None
+        # Triage ordering: track the sequence of alert_ids as they are triaged/skipped
+        self._triage_order: list[str] = []
         # Dynamic cascade state
         self._dynamic_alert_ids: set[str] = set()
         self._spawned_from: set[str] = set()
@@ -156,6 +158,7 @@ class AlertTriageEnv:
         self._done = False
         self._cumulative_reward = 0.0
         self._grader_score = None
+        self._triage_order = []
         # Dynamic cascade: track which alerts are original vs spawned
         self._original_alert_ids = {a.alert_id for a in self._alerts}
         self._dynamic_alert_ids = set()
@@ -264,6 +267,7 @@ class AlertTriageEnv:
             cumulative_reward=self._cumulative_reward,
             grader_score=self._grader_score,
             dynamic_alert_ids=set(self._dynamic_alert_ids),
+            triage_order=list(self._triage_order),
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -338,6 +342,7 @@ class AlertTriageEnv:
         alert.triaged = True
         alert.agent_decision = decision
         self._agent_decisions.append(decision)
+        self._triage_order.append(action.alert_id)
 
         # compute_reward now includes budget pressure via _penalty_budget().
         # Do NOT add self._budget_penalty() here — that would double-count it.
@@ -394,6 +399,7 @@ class AlertTriageEnv:
         alert.triaged = True
         alert.agent_decision = decision
         self._agent_decisions.append(decision)
+        self._triage_order.append(action.alert_id)
 
         reward = compute_reward(decision, self._ground_truth, self._make_state_snapshot())
 
@@ -555,6 +561,7 @@ class AlertTriageEnv:
             "agent_decisions":   self._agent_decisions,
             "cumulative_reward": self._cumulative_reward,
             "dynamic_alert_ids": self._dynamic_alert_ids,
+            "triage_order":      list(self._triage_order),
         }
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -8,13 +8,14 @@
   "num_incidents": 0,
   "noise_alerts": 0,
   "max_steps": 10,
-  "expected_score_range": [0.85, 1.0],
+  "expected_score_range": [0.75, 0.95],
   "grader_weights": {
-    "root_cause_accuracy": 0.40,
-    "severity_accuracy": 0.30,
-    "remediation_accuracy": 0.30,
+    "root_cause_accuracy": 0.38,
+    "severity_accuracy": 0.28,
+    "remediation_accuracy": 0.28,
     "incident_link_f1": 0.00,
     "false_alarm_accuracy": 0.00,
-    "stealth_bonus": 0.00
+    "efficiency": 0.03,
+    "triage_ordering": 0.03
   }
 }

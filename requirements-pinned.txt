@@ -1,1 +1,10 @@
+# ── Server dependencies (required inside Docker container) ──
 openenv-core>=0.2.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.35.0
+pydantic>=2.0.0
+
+# ── Inference agent dependencies (needed when running inference.py) ──
+openai>=2.7.2
+httpx>=0.28.1
+python-dotenv>=1.0.0

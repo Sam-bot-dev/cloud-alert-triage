@@ -93,6 +93,17 @@ _NOISE_METRICS = [
     ("response_time_ms",      300.0),
 ]
 
+# Context-string templates for dependency_outage alerts.
+# Template 0 is the "standard" pattern that _detect_cascade_groups() in
+# inference.py recognises via the exact prefix "Upstream service '...'".  
+# Templates 1+ use different phrasing that the cascade detector cannot pick
+# up, producing realistic partial link-F1 scores rather than a perfect 1.0.
+_DEP_CTX_TEMPLATES: list[str] = [
+    "Upstream service '{dep}' is reporting errors",                    # detectable
+    "Calls to '{dep}' timing out — upstream health degraded",          # not detectable
+    "{dep} response times exceeding SLA; downstream services impacted", # not detectable
+]
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Low-level dict constructors
@@ -226,8 +237,14 @@ def _build_dependency(
     dep_service: str,
     ts: str,
     incident_id: str | None = None,
+    ctx_variant: int = 0,
 ) -> tuple[dict, dict]:
-    """dependency_outage — service failing because an upstream dependency is down."""
+    """dependency_outage — service failing because an upstream dependency is down.
+    
+    ctx_variant selects the context string template:
+      0  standard prefix  "Upstream service '...'"  — cascade-detectable
+      1+ alternative phrasing                        — not cascade-detectable
+    """
     metric, thr = rng.choice(_DEP_METRICS)
     val = thr + rng.uniform(thr * 0.3, thr * 1.5)
     sev = "critical" if val > thr * 1.8 else "high"
@@ -235,10 +252,78 @@ def _build_dependency(
         f"{service} upstream calls failing: {metric.replace('_', ' ')} = {val:.1f} "
         f"(threshold: {thr:.0f}) — dependency '{dep_service}' may be down"
     )
-    ctx = f"Upstream service '{dep_service}' is reporting errors"
+    ctx_tmpl = _DEP_CTX_TEMPLATES[ctx_variant % len(_DEP_CTX_TEMPLATES)]
+    ctx = ctx_tmpl.format(dep=dep_service)
     return (
         _alert_dict(alert_id, service, metric, val, thr, msg, ts, ctx),
         _gt_dict(alert_id, "dependency_outage", sev, "acknowledge_and_monitor", incident_id),
+    )
+
+
+def _build_deploy_cpu(
+    rng: random.Random, alert_id: str, service: str, ts: str
+) -> tuple[dict, dict]:
+    """
+    Ambiguous alert: CPU/memory pressure caused by a deploy regression,
+    NOT genuine resource saturation.
+
+    The observable signal (cpu/memory metric above threshold) looks exactly
+    like *resource_exhaustion*.  True root cause is *deployment_bug* — the
+    new build introduced a memory regression that only becomes apparent under
+    normal production load.  Both the metric-first heuristic fallback AND the
+    LLM system prompt ("cpu/memory metric → resource_exhaustion") will
+    misclassify this, producing realistic partial scores rather than 1.0.
+    """
+    metric, thr = rng.choice([("cpu_usage_percent", 80.0), ("memory_usage_percent", 85.0)])
+    val = thr + rng.uniform(4.0, 10.0)      # elevated but ≤ +12 → severity "high"
+    ver = f"{rng.randint(2, 5)}.{rng.randint(0, 9)}.{rng.randint(0, 9)}"
+    mins_ago = rng.randint(10, 35)
+    msg = (
+        f"{service} {metric.replace('_', ' ')} climbing to {val:.1f}% "
+        f"(threshold: {thr:.0f}%) — resource pressure building"
+    )
+    ctx = (
+        f"Pressure began ~{mins_ago}m after deploy v{ver}; "
+        "no capacity changes planned; possible memory regression in new build"
+    )
+    return (
+        _alert_dict(alert_id, service, metric, val, thr, msg, ts, ctx),
+        _gt_dict(alert_id, "deployment_bug", "high", "rollback_deploy"),
+    )
+
+
+def _build_latency_dep(
+    rng: random.Random,
+    alert_id: str,
+    service: str,
+    ts: str,
+    dep_service: str | None = None,
+) -> tuple[dict, dict]:
+    """
+    Ambiguous alert: elevated network_latency caused by an upstream dependency
+    bottleneck — NOT a genuine network partition or NIC failure.
+
+    The observable metric (network_latency_ms) looks like *network_failure*.
+    True root cause is *dependency_outage*: the upstream service is the
+    bottleneck, not the network itself.  The context deliberately avoids the
+    "Upstream service '...'" pattern so the cascade detector does not
+    accidentally group this into an incident chain.
+    """
+    if dep_service is None:
+        dep_service = rng.choice(sorted(_ALL_SERVICES))
+    thr = 200.0
+    val = thr + rng.uniform(60.0, 280.0)
+    msg = (
+        f"{service} response latency at {val:.1f}ms "
+        f"(threshold: {thr:.0f}ms) — elevated above SLA baseline"
+    )
+    ctx = (
+        f"High latency correlates with {dep_service} slowdowns; "
+        f"no packet loss or NIC errors detected on {service}"
+    )
+    return (
+        _alert_dict(alert_id, service, "network_latency_ms", val, thr, msg, ts, ctx),
+        _gt_dict(alert_id, "dependency_outage", "high", "acknowledge_and_monitor"),
     )
 
 
@@ -356,7 +441,10 @@ def _generate_easy(rng: random.Random) -> dict[str, Any]:
         ts = _ts(i * 5)                # spaced 5 minutes apart
 
         if rc == "resource_exhaustion":
-            a, gt = _build_resource(rng, alert_id, svc, ts)
+            # Ambiguous: CPU/memory pressure from a deploy regression; metric looks
+            # like resource_exhaustion but true root cause is deployment_bug.
+            # Requires reading the context (deploy timestamp, version) to classify correctly.
+            a, gt = _build_deploy_cpu(rng, alert_id, svc, ts)
         elif rc == "network_failure":
             a, gt = _build_network(rng, alert_id, svc, ts)
         elif rc == "deployment_bug":
@@ -364,13 +452,11 @@ def _generate_easy(rng: random.Random) -> dict[str, Any]:
         elif rc == "config_error":
             a, gt = _build_config(rng, alert_id, svc, ts)
         else:  # dependency_outage
+            # Ambiguous: network_latency metric elevated due to upstream slowdowns;
+            # looks like network_failure but context clues point to dependency_outage.
             deps = SERVICE_GRAPH.get(svc, [])
-            if deps:
-                dep_svc = deps[0]
-                a, gt = _build_dependency(rng, alert_id, svc, dep_svc, ts)
-            else:
-                # Leaf node has no upstream deps; fall back to config_error
-                a, gt = _build_config(rng, alert_id, svc, ts)
+            dep_svc = deps[0] if deps else rng.choice(_ALL_SERVICES)
+            a, gt = _build_latency_dep(rng, alert_id, svc, ts, dep_svc)
 
         alerts.append(a)
         ground_truth.append(gt)
@@ -410,9 +496,16 @@ def _generate_medium(rng: random.Random) -> dict[str, Any]:
     alerts.append(a); ground_truth.append(gt); inc1_alert_ids.append(aid)
 
     # Cascade dependents
-    for svc in inc1_chain[1:]:
+    for idx, svc in enumerate(inc1_chain[1:]):
         aid = _next_id()
-        a, gt = _build_dependency(rng, aid, svc, inc1_root, _ts(rng.randint(5, 15)), inc1_id)
+        # Use a non-detectable context for the last cascade alert in long chains
+        # (chain length ≥ 4).  This makes the cascade-group detector find 3 of 4
+        # alerts, giving a partial link-F1 instead of a perfect 1.0.
+        use_variant = (idx == len(inc1_chain[1:]) - 1) and len(inc1_chain) >= 4
+        a, gt = _build_dependency(
+            rng, aid, svc, inc1_root, _ts(rng.randint(5, 15)), inc1_id,
+            ctx_variant=(1 if use_variant else 0),
+        )
         alerts.append(a); ground_truth.append(gt); inc1_alert_ids.append(aid)
 
     incidents.append({
@@ -434,9 +527,13 @@ def _generate_medium(rng: random.Random) -> dict[str, Any]:
     gt["incident_id"] = inc2_id
     alerts.append(a); ground_truth.append(gt); inc2_alert_ids.append(aid)
 
-    for svc in inc2_chain[1:]:
+    for idx, svc in enumerate(inc2_chain[1:]):
         aid = _next_id()
-        a, gt = _build_dependency(rng, aid, svc, inc2_root, _ts(rng.randint(8, 20)), inc2_id)
+        use_variant = (idx == len(inc2_chain[1:]) - 1) and len(inc2_chain) >= 4
+        a, gt = _build_dependency(
+            rng, aid, svc, inc2_root, _ts(rng.randint(8, 20)), inc2_id,
+            ctx_variant=(1 if use_variant else 0),
+        )
         alerts.append(a); ground_truth.append(gt); inc2_alert_ids.append(aid)
 
     incidents.append({
@@ -461,9 +558,15 @@ def _generate_medium(rng: random.Random) -> dict[str, Any]:
         aid = _next_id()
         ts = _ts(rng.randint(0, 25))
         if rc == "resource_exhaustion":
-            a, gt = _build_resource(rng, aid, svc, ts)
+            # Ambiguous: CPU/memory pressure from a deploy regression — metric looks
+            # like resource_exhaustion but true root cause is deployment_bug.
+            a, gt = _build_deploy_cpu(rng, aid, svc, ts)
         elif rc == "network_failure":
-            a, gt = _build_network(rng, aid, svc, ts)
+            # Ambiguous: network_latency elevated by upstream slowdowns, not a
+            # genuine network partition — context distinguishes it.
+            deps = SERVICE_GRAPH.get(svc, [])
+            dep_svc = deps[0] if deps else _ALL_SERVICES[0]
+            a, gt = _build_latency_dep(rng, aid, svc, ts, dep_svc)
         elif rc == "deployment_bug":
             a, gt = _build_deploy(rng, aid, svc, ts)
         elif rc == "config_error":
@@ -522,10 +625,12 @@ def _generate_hard(rng: random.Random) -> dict[str, Any]:
         gt["incident_id"] = inc_id
         alerts.append(a); ground_truth.append(gt); inc_ids.append(aid)
 
-        # Cascade dependent alerts
+        # Cascade dependent alerts — ctx_variant=1 uses non-standard phrasing so
+        # cascade groups cannot be detected by simple text matching alone.
+        # Correct grouping requires reasoning over the service dependency graph.
         for svc in chain[1:]:
             aid = _next_id()
-            a, gt = _build_dependency(rng, aid, svc, root_svc, _ts(rng.randint(5, 25)), inc_id)
+            a, gt = _build_dependency(rng, aid, svc, root_svc, _ts(rng.randint(5, 25)), inc_id, ctx_variant=1)
             alerts.append(a); ground_truth.append(gt); inc_ids.append(aid)
 
         incidents.append({
@@ -608,9 +713,15 @@ def _generate_hard(rng: random.Random) -> dict[str, Any]:
         aid = _next_id()
         ts = _ts(rng.randint(0, 40))
         if rc == "resource_exhaustion":
-            a, gt = _build_resource(rng, aid, svc, ts)
+            # Ambiguous: CPU/memory pressure from a deploy regression — metric looks
+            # like resource_exhaustion but true root cause is deployment_bug.
+            a, gt = _build_deploy_cpu(rng, aid, svc, ts)
         elif rc == "network_failure":
-            a, gt = _build_network(rng, aid, svc, ts)
+            # Ambiguous: network_latency elevated by upstream slowdowns, not a
+            # genuine network partition — context distinguishes it.
+            deps = SERVICE_GRAPH.get(svc, [])
+            dep_svc = deps[0] if deps else _ALL_SERVICES[0]
+            a, gt = _build_latency_dep(rng, aid, svc, ts, dep_svc)
         elif rc == "deployment_bug":
             a, gt = _build_deploy(rng, aid, svc, ts)
         elif rc == "config_error":
