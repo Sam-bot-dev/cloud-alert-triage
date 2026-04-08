@@ -108,8 +108,8 @@ if not API_KEY:
 
 _hf_token = _hf_token or ""
 
-TASKS: list[str]             = ["easy", "medium", "hard"]
-DEFAULT_SEED: int             = 42
+TASKS: list[str]             = os.environ.get("TASK_ID", "").split(",") if os.environ.get("TASK_ID") else ["easy", "medium", "hard"]
+DEFAULT_SEED: int             = int(os.environ.get("SEED", "42"))
 TOTAL_BUDGET_SECONDS: float  = 20 * 60
 PER_TASK_BUDGET_SECONDS: float = 6 * 60
 LLM_TIMEOUT_SECONDS: float   = 60.0
@@ -281,22 +281,41 @@ def _detect_cascade_groups(
         if a.get("triaged") or _is_false_alarm(a):
             continue
         ctx = a.get("context") or ""
-        # Match the exact string produced by _build_dependency
-        marker = "Upstream service '"
-        if marker not in ctx:
-            continue
-        try:
-            start   = ctx.index(marker) + len(marker)
-            end     = ctx.index("'", start)
-            dep_svc = ctx[start:end]
-        except ValueError:
-            continue
+        msg = a.get("message") or ""
+        dep_svc: str | None = None
 
-        if dep_svc not in svc_to_aid:
-            continue  # upstream service has no alert; can't form an incident group
+        # Pattern 1: "Upstream service '<X>'" (standard _build_dependency)
+        marker = "Upstream service '"
+        if marker in ctx:
+            try:
+                start = ctx.index(marker) + len(marker)
+                end   = ctx.index("'", start)
+                dep_svc = ctx[start:end]
+            except ValueError:
+                pass
+
+        # Pattern 2: "Calls to '<X>' timing out" (alt ctx_variant 1)
+        if dep_svc is None and "Calls to '" in ctx:
+            try:
+                start = ctx.index("Calls to '") + len("Calls to '")
+                end   = ctx.index("'", start)
+                dep_svc = ctx[start:end]
+            except ValueError:
+                pass
+
+        # Pattern 3: "dependency '<X>' may be down" from message
+        if dep_svc is None and "dependency '" in msg:
+            try:
+                start = msg.index("dependency '") + len("dependency '")
+                end   = msg.index("'", start)
+                dep_svc = msg[start:end]
+            except ValueError:
+                pass
+
+        if dep_svc is None or dep_svc not in svc_to_aid:
+            continue
 
         if dep_svc not in groups:
-            # Seed the group with the root service's own alert
             groups[dep_svc] = [svc_to_aid[dep_svc]]
 
         aid = a["alert_id"]
@@ -354,6 +373,15 @@ ROOT CAUSE CLASSIFICATION
   error_rate spike + deploy context            →  deployment_bug
   connection_refused / auth_failure            →  config_error
   sev≈low / "scheduled batch" / "maintenance" →  false_alarm  →  SKIP
+
+CONTEXT OVERRIDES (take priority over metric-based rules above):
+  cpu/memory metric + "after deploy"/"deploy v"/"memory regression"/"new build" in context
+      → deployment_bug + rollback_deploy  (NOT resource_exhaustion)
+  cpu/memory metric + "mildly"/"gradual"/"memory leak" in message
+      → resource_exhaustion + acknowledge_and_monitor  (STEALTH — do NOT scale_up)
+  network_latency + "correlates with"/"no packet loss"/"no NIC errors" in context
+      → dependency_outage + acknowledge_and_monitor  (NOT network_failure)
+  Always read the context field — it disambiguates metric-ambiguous alerts.
 
 STEALTH INCIDENT: Alert with sev≈medium and "mildly"/"gradual"/"memory leak"
 in its message, whose downstream dependents are all alerting loudly. That
@@ -681,13 +709,33 @@ def _smart_fallback(alert: dict, service_map: dict) -> dict:
     ctx    = (alert.get("context") or "").lower()
 
     # Root cause + remediation — order matters: most-specific metric first.
+    #
+    # Stealth incident: subtle signal words in message → resource_exhaustion + monitor
+    if any(w in msg for w in ("mildly", "minor", "gradual", "memory leak", "barely")):
+        return {
+            "action_type": "triage",
+            "alert_id":    alert["alert_id"],
+            "root_cause":  "resource_exhaustion",
+            "severity":    _infer_severity(alert),
+            "remediation": "acknowledge_and_monitor",
+        }
+
     if any(m in metric for m in ("cpu_usage", "memory_usage", "disk_usage")):
-        root_cause, remediation = "resource_exhaustion", "scale_up"
+        # Context-aware: deploy/regression context overrides metric-based guess
+        # Use specific phrases to avoid false-matching "No recent deploys"
+        if any(kw in ctx for kw in ("after deploy", "deploy v", "memory regression", "new build")):
+            root_cause, remediation = "deployment_bug", "rollback_deploy"
+        else:
+            root_cause, remediation = "resource_exhaustion", "scale_up"
     elif any(m in metric for m in ("upstream_error", "dependency_timeout", "upstream_latency")):
         # upstream_error_rate, dependency_timeout_count, upstream_latency_ms
         root_cause, remediation = "dependency_outage", "acknowledge_and_monitor"
     elif any(m in metric for m in ("network_latency", "packet_loss", "tcp_connection")):
-        root_cause, remediation = "network_failure", "escalate_to_team"
+        # Context-aware: upstream slowdown signals override network_failure
+        if any(kw in ctx for kw in ("correlates with", "no packet loss", "slowdowns", "no nic errors")):
+            root_cause, remediation = "dependency_outage", "acknowledge_and_monitor"
+        else:
+            root_cause, remediation = "network_failure", "escalate_to_team"
     elif any(m in metric for m in ("auth_failure", "connection_refused")):
         # Must appear before error_rate/health_check to avoid false routing
         root_cause, remediation = "config_error", "fix_config"
