@@ -199,8 +199,8 @@ class EnvironmentState(BaseModel):
 class ResetRequest(BaseModel):
     """Request body for POST /reset."""
 
-    task_id: str = "easy"
-    seed: int = 42
+    task_id: str | None = "easy"
+    seed: int | None = 42
 
 
 # ---------------------------------------------------------------------------
