@@ -24,6 +24,7 @@ Design notes
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -104,6 +105,18 @@ async def health() -> dict[str, str]:
 async def home() -> dict[str, str]:
     """Return a welcome message for the root endpoint."""
     return {"message": "CloudAlert Triage AI is running"}
+
+
+@app.get("/tasks", summary="List all task configurations")
+async def list_tasks() -> list[dict[str, Any]]:
+    """Return all task configs (easy, medium, hard) as JSON."""
+    tasks_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tasks")
+    tasks = []
+    for name in ["easy", "medium", "hard"]:
+        path = os.path.join(tasks_dir, f"task_{name}.json")
+        with open(path) as f:
+            tasks.append(json.load(f))
+    return tasks
 
 
 @app.post("/reset", summary="Start a new episode")

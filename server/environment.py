@@ -160,6 +160,19 @@ class AlertTriageEnv:
         self._original_alert_ids = {a.alert_id for a in self._alerts}
         self._dynamic_alert_ids = set()
         self._spawned_from = set()
+        
+        # Partial observability: mask metric values for some alerts
+        from server.config import PARTIAL_OBSERVABILITY_ENABLED, PARTIAL_OBSERVABILITY_TASKS
+        if PARTIAL_OBSERVABILITY_ENABLED and task_id in PARTIAL_OBSERVABILITY_TASKS:
+            # Mask 50% of alerts to require investigation
+            import random as rng_module
+            rng = rng_module.Random(seed + 1000)  # Different seed for masking
+            alert_list = list(self._alerts)
+            rng.shuffle(alert_list)
+            # Mask first half of shuffled alerts
+            for alert in alert_list[:len(alert_list)//2]:
+                alert.masked = True
+        
         self._cascade_feedback = ""
         self._active = True
 
@@ -262,8 +275,42 @@ class AlertTriageEnv:
             return self._apply_triage(action)
         elif action.action_type == "link_alerts":
             return self._apply_link(action)
+        elif action.action_type == "investigate":
+            return self._apply_investigate(action)
         else:  # "skip" — guaranteed by Action validator
             return self._apply_skip(action)
+
+    def _apply_investigate(self, action: Action) -> tuple[float, str]:
+        """Reveal masked details for an alert (partial observability)."""
+        alert = self._find_alert(action.alert_id)
+        
+        if alert is None:
+            return (
+                -0.10,
+                f"Unknown alert_id '{action.alert_id}'. No investigation recorded.",
+            )
+        
+        if alert.investigated:
+            return (
+                -0.05,
+                f"Alert '{action.alert_id}' already investigated. Skipping.",
+            )
+        
+        # Mark as investigated and unmask
+        alert.investigated = True
+        was_masked = alert.masked
+        if alert.masked:
+            alert.masked = False
+        
+        # Only reward if the alert was actually masked (partial observability reveal)
+        # Investigating a non-masked alert gives 0.0 to prevent free-reward exploit
+        reward = 0.10 if was_masked else 0.0
+        msg = (
+            f"Investigated {action.alert_id}: metric value revealed"
+            if was_masked
+            else f"Alert {action.alert_id} was already visible — no new information."
+        )
+        return reward, msg
 
     def _apply_triage(self, action: Action) -> tuple[float, str]:
         alert = self._find_alert(action.alert_id)
@@ -452,8 +499,35 @@ class AlertTriageEnv:
         )
 
     def _build_observation(self, feedback: str) -> Observation:
+        # Create alerts list, masking metric values for uninvestigated alerts if partial observability enabled
+        from server.config import PARTIAL_OBSERVABILITY_ENABLED, PARTIAL_OBSERVABILITY_TASKS
+        
+        alerts_to_show = []
+        for alert in self._alerts:
+            if (PARTIAL_OBSERVABILITY_ENABLED and 
+                self._task_id in PARTIAL_OBSERVABILITY_TASKS and
+                alert.masked and not alert.investigated and not alert.triaged):
+                # Create a masked version
+                masked_alert = Alert(
+                    alert_id=alert.alert_id,
+                    timestamp=alert.timestamp,
+                    service=alert.service,
+                    metric=alert.metric,
+                    metric_value=None,  # Hidden!
+                    threshold=alert.threshold,
+                    message=alert.message,
+                    context=alert.context,
+                    triaged=alert.triaged,
+                    investigated=alert.investigated,
+                    agent_decision=alert.agent_decision,
+                    masked=True,
+                )
+                alerts_to_show.append(masked_alert)
+            else:
+                alerts_to_show.append(alert)
+        
         return Observation(
-            alerts=list(self._alerts),
+            alerts=alerts_to_show,
             service_map=self._service_map,
             pending_count=self._pending_count(),
             step_number=self._step_count,

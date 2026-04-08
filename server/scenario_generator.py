@@ -55,6 +55,12 @@ _BASE_DT = datetime.datetime(2024, 1, 15, 10, 0, 0, tzinfo=datetime.timezone.utc
 # Stable sorted list of all services in the graph.
 _ALL_SERVICES: list[str] = get_service_names()
 
+# Tier 5 data layer services - used for incident root causes in hard mode
+_TIER5_SERVICES = ["postgres-primary", "redis-cache", "kafka-broker", "elasticsearch", "object-storage"]
+
+# Root cause labels for incidents
+_INCIDENT_ROOT_CAUSES = ["resource_exhaustion", "network_failure", "config_error", "deployment_bug"]
+
 # Metric name / threshold pairs used by each root-cause builder.
 _RESOURCE_METRICS = [
     ("cpu_usage_percent",      80.0),
@@ -483,18 +489,13 @@ def _generate_medium(rng: random.Random) -> dict[str, Any]:
 def _generate_hard(rng: random.Random) -> dict[str, Any]:
     """
     30 alerts:
-        INC-001 (postgres-primary, resource_exhaustion):  4 alerts
-        INC-002 (elasticsearch,   network_failure):       4 alerts
-        INC-003 (kafka-broker,    config_error):          4 alerts
-        INC-004 (object-storage,  deployment_bug):        3 alerts
-        INC-005 (redis-cache,     stealth):               3 alerts
-        Independent:                                      6 alerts
-        False alarms / noise (1 misleading):              6 alerts
-    Total: 4+4+4+3+3+6+6 = 30
+        5 incidents (root cause services randomly selected from Tier 5)
+        Independent alerts
+        False alarms / noise
+    Total: 30 alerts
 
-    After generation the alerts list is shuffled by a deterministic random
-    permutation so that incident alerts are interleaved with independent and
-    noise alerts rather than grouped sequentially.
+    The seed determines which Tier 5 services become incident roots,
+    which root causes they have, and the cascade chains.
     """
     alerts: list[dict] = []
     ground_truth: list[dict] = []
@@ -534,53 +535,61 @@ def _generate_hard(rng: random.Random) -> dict[str, Any]:
             "alert_ids":    inc_ids,
         })
 
+    # ── Randomly select 5 incident root services from Tier 5 ───────────────
+    # Shuffle Tier 5 services based on seed
+    tier5_shuffled = _TIER5_SERVICES.copy()
+    rng.shuffle(tier5_shuffled)
+    incident_services = tier5_shuffled[:5]  # Select 5 for incidents
+    
+    # Shuffle root causes for variety
+    causes_shuffled = _INCIDENT_ROOT_CAUSES.copy()
+    rng.shuffle(causes_shuffled)
+    
+    # Map each incident to a root cause and builder
+    incident_config = [
+        (incident_services[0], causes_shuffled[0], _build_resource),
+        (incident_services[1], causes_shuffled[1], _build_network),
+        (incident_services[2], causes_shuffled[2], _build_config),
+        (incident_services[3], causes_shuffled[3] if len(causes_shuffled) > 3 else causes_shuffled[0], _build_deploy),
+        (incident_services[4], "resource_exhaustion", _build_resource),  # stealth incident
+    ]
+
     # ── Five incidents ────────────────────────────────────────────────────
-
-    # INC-001: postgres-primary → auth-service, inventory-service, order-service
-    _add_incident(
-        "INC-001", "postgres-primary", "resource_exhaustion",
-        _cascade_chain("postgres-primary", 4), _build_resource,
-    )
-
-    # INC-002: elasticsearch → recommendation-engine, search-service, api-gateway
-    _add_incident(
-        "INC-002", "elasticsearch", "network_failure",
-        _cascade_chain("elasticsearch", 4), _build_network,
-    )
-
-    # INC-003: kafka-broker → notification-service, order-service, api-gateway
-    _add_incident(
-        "INC-003", "kafka-broker", "config_error",
-        _cascade_chain("kafka-broker", 4), _build_config,
-    )
-
-    # INC-004: object-storage → email-worker, notification-service  (3 alerts)
-    _add_incident(
-        "INC-004", "object-storage", "deployment_bug",
-        _cascade_chain("object-storage", 3), _build_deploy,
-    )
-
-    # INC-005: redis-cache (STEALTH root) → auth-service, recommendation-engine
-    inc5_id = "INC-005"
-    inc5_chain = _cascade_chain("redis-cache", 3)
-    inc5_alert_ids: list[str] = []
-
-    aid = _next_id()
-    a, gt = _build_stealth_root(rng, aid, "redis-cache", _ts(rng.randint(0, 10)), inc5_id)
-    alerts.append(a); ground_truth.append(gt); inc5_alert_ids.append(aid)
-
-    for svc in inc5_chain[1:]:
+    # Total incident alerts = 18 (same as original: 4+4+4+3+3 = 18)
+    # First 3 have 4 alerts each, last 2 have 3 alerts each
+    incident_chain_lengths = [4, 4, 4, 3, 3]
+    rng.shuffle(incident_chain_lengths)  # Randomize which incidents are larger
+    
+    for i, (root_svc, root_cause, builder) in enumerate(incident_config):
+        inc_id = f"INC-{i+1:03d}"
+        chain_len = incident_chain_lengths[i]
+        is_stealth = (i == 4)  # Mark last incident as stealth
+        
+        chain = _cascade_chain(root_svc, chain_len)
+        inc_ids: list[str] = []
+        
+        # Root alert
         aid = _next_id()
-        a, gt = _build_dependency(rng, aid, svc, "redis-cache", _ts(rng.randint(5, 20)), inc5_id)
-        alerts.append(a); ground_truth.append(gt); inc5_alert_ids.append(aid)
-
-    incidents.append({
-        "incident_id":  inc5_id,
-        "root_service": "redis-cache",
-        "root_cause":   "resource_exhaustion",
-        "alert_ids":    inc5_alert_ids,
-        "stealth":      True,
-    })
+        if is_stealth:
+            a, gt = _build_stealth_root(rng, aid, root_svc, _ts(rng.randint(0, 10)), inc_id)
+        else:
+            a, gt = builder(rng, aid, root_svc, _ts(rng.randint(0, 10)))
+        gt["incident_id"] = inc_id
+        alerts.append(a); ground_truth.append(gt); inc_ids.append(aid)
+        
+        # Cascade dependent alerts
+        for svc in chain[1:]:
+            aid = _next_id()
+            a, gt = _build_dependency(rng, aid, svc, root_svc, _ts(rng.randint(5, 25)), inc_id)
+            alerts.append(a); ground_truth.append(gt); inc_ids.append(aid)
+        
+        incidents.append({
+            "incident_id":  inc_id,
+            "root_service": root_svc,
+            "root_cause":   root_cause,
+            "alert_ids":    inc_ids,
+            "stealth":      is_stealth,
+        })
 
     # ── Independent alerts (6) ────────────────────────────────────────────
     # Six root-cause labels (cycling the 5-type pool to get 6 items).
@@ -619,6 +628,27 @@ def _generate_hard(rng: random.Random) -> dict[str, Any]:
         ts = _ts(rng.randint(0, 40))
         a, gt = _build_false_alarm(rng, aid, svc, ts, misleading=(i == 0))
         alerts.append(a); ground_truth.append(gt)
+
+    # Safety check: if BFS chains produced fewer alerts than expected (very short
+    # cascade paths), pad with extra independent alerts to ensure count is stable.
+    actual = len(alerts)
+    if actual != 30:
+        import warnings
+        warnings.warn(
+            f"Hard scenario generated {actual} alerts (expected 30) for seed {id(rng)}. "
+            "Padding with extra independent alerts."
+        )
+        extra_svcs = [s for s in _ALL_SERVICES if s not in {a["service"] for a in alerts}]
+        extra_rcs = _base_rcs.copy()
+        rng.shuffle(extra_svcs)
+        while len(alerts) < 30 and extra_svcs:
+            svc = extra_svcs.pop()
+            rc = extra_rcs[len(alerts) % 5]
+            aid = _next_id()
+            ts = _ts(rng.randint(0, 40))
+            a, gt = _build_resource(rng, aid, svc, ts)
+            alerts.append(a)
+            ground_truth.append(gt)
 
     assert len(alerts) == 30, f"Hard: expected 30 alerts, got {len(alerts)}"
 

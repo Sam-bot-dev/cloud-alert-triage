@@ -15,7 +15,7 @@ try:
     from server.service_graph import get_service_names
     from server.config import ROOT_CAUSE_CATEGORIES, SEVERITY_LEVELS, REMEDIATION_ACTIONS
     AVAILABLE = True
-except Exception:
+except Exception:  # noqa: BLE001
     AVAILABLE = False
 
 pytestmark = pytest.mark.skipif(

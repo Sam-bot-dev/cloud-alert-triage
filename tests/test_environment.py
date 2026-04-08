@@ -26,7 +26,7 @@ try:
     from server.environment import AlertTriageEnv
     from server.models import Action, EnvironmentState, Observation, StepResult
     AVAILABLE = True
-except Exception:
+except Exception:  # noqa: BLE001
     AVAILABLE = False
 
 pytestmark = pytest.mark.skipif(

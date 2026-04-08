@@ -241,7 +241,7 @@ _STEALTH_WRONG_TRIAGE = [
 class TestHardGrader:
 
     def test_stealth_bonus_applies(self):
-        """Hard grader awards exactly +0.05 bonus for identifying the stealth incident root cause."""
+        """Hard grader awards exactly +0.10 bonus for identifying the stealth incident root cause."""
         # Same correct triage; only difference is whether the stealth marker exists.
         state_with_stealth = _make_state(
             "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD, incidents=_STEALTH_INCIDENT
@@ -252,7 +252,7 @@ class TestHardGrader:
         score_with = grade_episode("hard", state_with_stealth)
         score_without = grade_episode("hard", state_no_stealth)
         assert score_with > score_without
-        assert score_with - score_without == pytest.approx(0.05)
+        assert score_with - score_without == pytest.approx(0.10)
 
     def test_no_stealth_incident_no_bonus(self):
         """Without a stealth incident in the incidents list, bonus is 0."""

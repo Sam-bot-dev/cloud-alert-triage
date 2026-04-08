@@ -29,12 +29,14 @@ class Alert(BaseModel):
     timestamp: str                          # ISO-8601 string, e.g. "2024-01-15T10:23:00Z"
     service: str                            # originating microservice name
     metric: str                             # e.g. "cpu_usage_percent"
-    metric_value: float                     # observed value
+    metric_value: float | None = None       # observed value (None if masked)
     threshold: float                        # threshold that was breached
     message: str                            # human-readable alert text
     context: str | None = None              # optional extra context (recent deploy, etc.)
     triaged: bool = False                   # True once the agent has acted on this alert
+    investigated: bool = False             # True if agent used investigate action
     agent_decision: dict[str, Any] | None = None  # agent's triage result if triaged
+    masked: bool = False                   # True if metric_value is hidden (partial observability)
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +147,10 @@ class Action(BaseModel):
         elif self.action_type == "skip":
             if self.alert_id is None:
                 raise ValueError("skip action requires 'alert_id'")
+
+        elif self.action_type == "investigate":
+            if self.alert_id is None:
+                raise ValueError("investigate action requires 'alert_id'")
 
         return self
 
