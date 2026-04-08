@@ -28,7 +28,7 @@ REMEDIATION_ACTIONS: list[str] = [
 ]
 
 # Valid action types for the agent
-ACTION_TYPES: list[str] = ["triage", "link_alerts", "skip"]
+ACTION_TYPES: list[str] = ["triage", "link_alerts", "skip", "investigate"]
 
 # Default server port (Hugging Face Spaces standard)
 DEFAULT_PORT: int = 7860
@@ -54,6 +54,14 @@ SEVERITY_ORDER: dict[str, int] = {
 # After CASCADE_TRIGGER_STEP environment steps, any original critical/high
 # alert that is still untriaged spawns exactly one new dependent alert on a
 # downstream service.  Dynamic alerts participate in per-step rewards but are
-# excluded from the final grader score for deadline safety.
+# excluded from the final grader score.
 CASCADE_TRIGGER_STEP: int = 5
 CASCADE_ELIGIBLE_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
+
+# ---------------------------------------------------------------------------
+# Partial observability (disabled — reserved for future use)
+# ---------------------------------------------------------------------------
+# Set PARTIAL_OBSERVABILITY_ENABLED to True to hide metric values on a random
+# subset of alerts until the agent uses the "investigate" action.
+PARTIAL_OBSERVABILITY_ENABLED: bool = False
+PARTIAL_OBSERVABILITY_TASKS: list[str] = []

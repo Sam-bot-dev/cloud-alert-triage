@@ -64,20 +64,46 @@ try:
 except ImportError:
     pass
 
-ENV_URL: str       = os.environ.get("ENV_URL", "http://localhost:7860").rstrip("/")
-API_BASE_URL: str  = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL_NAME: str    = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
+ENV_URL: str    = os.environ.get("ENV_URL", "http://localhost:7860").rstrip("/")
+MODEL_NAME: str = os.environ.get("MODEL_NAME", "llama-3.3-70b-versatile")
 
-if "groq" in API_BASE_URL:
-    API_KEY: str = (
-        os.environ.get("GROQ_API_KEY")
-        or os.environ.get("HF_TOKEN")
-        or os.environ.get("OPENAI_API_KEY", "")
-    )
-elif "openai.com" in API_BASE_URL:
-    API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("HF_TOKEN", "")
+# ---------------------------------------------------------------------------
+# API base URL + key resolution
+#
+# Priority for API_BASE_URL:
+#   1. Explicit ENV var → use as-is.
+#   2. GROQ_API_KEY present → Groq endpoint.
+#   3. OPENAI_API_KEY present → OpenAI endpoint.
+#   4. Only HF_TOKEN → HF Inference Endpoints (accepts HF tokens directly).
+#
+# This covers the hackathon evaluator pattern where only HF_TOKEN is injected.
+# ---------------------------------------------------------------------------
+_explicit_base  = os.environ.get("API_BASE_URL", "")
+_groq_key       = os.environ.get("GROQ_API_KEY", "")
+_openai_key     = os.environ.get("OPENAI_API_KEY", "")
+_hf_token       = os.environ.get("HF_TOKEN", "")
+
+if _explicit_base:
+    API_BASE_URL: str = _explicit_base
+elif _groq_key:
+    API_BASE_URL = "https://api.groq.com/openai/v1"
+elif _openai_key:
+    API_BASE_URL = "https://api.openai.com/v1"
 else:
-    API_KEY = os.environ.get("HF_TOKEN") or os.environ.get("OPENAI_API_KEY", "")
+    # Fallback: HF Inference Endpoints — works with HF_TOKEN out of the box.
+    # Model served must be an instruction-tuned chat model deployed on HF.
+    API_BASE_URL = "https://api-inference.huggingface.co/v1"
+
+# Pick the right API key for the resolved endpoint
+if "groq" in API_BASE_URL:
+    API_KEY: str = _groq_key or _hf_token or _openai_key
+elif "openai.com" in API_BASE_URL:
+    API_KEY = _openai_key or _hf_token
+else:
+    # HF Inference or any other OpenAI-compatible host
+    API_KEY = _hf_token or _openai_key or _groq_key
+
+del _explicit_base, _groq_key, _openai_key, _hf_token
 
 TASKS: list[str]             = ["easy", "medium", "hard"]
 DEFAULT_SEED: int             = 42
@@ -545,19 +571,56 @@ def _fill_missing(
     plan: list[dict], all_alerts: list[dict], service_map: dict
 ) -> list[dict]:
     """
-    Append a fallback action for every pending alert not covered by the plan.
+    Validate the LLM plan, then append fallback actions for any uncovered alerts.
+
+    Three guarantees:
+      1. Deduplication — if the LLM emits two triage/skip actions for the same
+         alert_id, only the first is kept (second would get a -0.15 penalty).
+      2. Skip validation — if the LLM issues skip for a non-false-alarm alert
+         (sev > low), replace it with a smart triage so we avoid the -0.30
+         penalty and the grader marking it as uncovered.
+      3. Gap filling — any alert not covered after validation gets a smart
+         fallback action appended.
     """
-    covered: set[str] = {
-        action.get("alert_id", "")
-        for action in plan
-        if action.get("action_type") in ("triage", "skip")
-    }
+    alert_lookup: dict[str, dict] = {a["alert_id"]: a for a in all_alerts}
+    covered:  set[str]    = set()
+    validated: list[dict] = []
+
+    for action in plan:
+        at  = action.get("action_type")
+        aid = action.get("alert_id", "")
+
+        if at == "triage":
+            if aid in covered:
+                continue   # dedup — skip second triage (-0.15 avoided)
+            covered.add(aid)
+            validated.append(action)
+
+        elif at == "skip":
+            if aid in covered:
+                continue
+            alert = alert_lookup.get(aid)
+            if alert is None:
+                continue   # unknown id — env will -0.10 it; not worth sending
+            if _is_false_alarm(alert):
+                covered.add(aid)
+                validated.append(action)   # genuine skip
+            else:
+                # LLM wrongly issued skip for a real alert — replace with triage
+                validated.append(_smart_fallback(alert, service_map))
+                covered.add(aid)
+
+        else:
+            # link_alerts — pass through (no coverage tracking needed)
+            validated.append(action)
+
+    # Fill any remaining gaps with smart fallback
     extras = [
         _smart_fallback(a, service_map)
         for a in all_alerts
         if not a.get("triaged") and a["alert_id"] not in covered
     ]
-    return plan + extras
+    return validated + extras
 
 
 def build_full_plan(client: OpenAI, obs: dict) -> list[dict]:
@@ -613,20 +676,30 @@ def _smart_fallback(alert: dict, service_map: dict) -> dict:
     msg    = (alert.get("message") or "").lower()
     ctx    = (alert.get("context") or "").lower()
 
-    # Root cause + remediation
+    # Root cause + remediation — order matters: most-specific metric first.
     if any(m in metric for m in ("cpu_usage", "memory_usage", "disk_usage")):
         root_cause, remediation = "resource_exhaustion", "scale_up"
     elif any(m in metric for m in ("upstream_error", "dependency_timeout", "upstream_latency")):
+        # upstream_error_rate, dependency_timeout_count, upstream_latency_ms
         root_cause, remediation = "dependency_outage", "acknowledge_and_monitor"
     elif any(m in metric for m in ("network_latency", "packet_loss", "tcp_connection")):
         root_cause, remediation = "network_failure", "escalate_to_team"
-    elif any(m in metric for m in ("error_rate", "5xx", "health_check")):
-        if "deploy" in msg or "deploy" in ctx or "v" in ctx:
+    elif any(m in metric for m in ("auth_failure", "connection_refused")):
+        # Must appear before error_rate/health_check to avoid false routing
+        root_cause, remediation = "config_error", "fix_config"
+    elif any(m in metric for m in ("error_rate", "5xx")):
+        # error_rate_percent / http_5xx_rate — deploy context added by _build_deploy
+        if "deploy" in msg or "deploy" in ctx:
             root_cause, remediation = "deployment_bug", "rollback_deploy"
         else:
             root_cause, remediation = "dependency_outage", "acknowledge_and_monitor"
-    elif any(m in metric for m in ("auth_failure", "connection_refused")):
-        root_cause, remediation = "config_error", "fix_config"
+    elif "health_check" in metric:
+        # health_check_failures appears in both _build_deploy and _build_config;
+        # deploy context (added only by _build_deploy) disambiguates.
+        if "deploy" in msg or "deploy" in ctx:
+            root_cause, remediation = "deployment_bug", "rollback_deploy"
+        else:
+            root_cause, remediation = "config_error", "fix_config"
     else:
         root_cause, remediation = "dependency_outage", "acknowledge_and_monitor"
 
