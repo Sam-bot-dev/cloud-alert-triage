@@ -264,7 +264,7 @@ The grader computes a deterministic score in **[0.0, 1.0]** at episode end. Un-t
 ### Accuracy definitions
 
 - **root_cause_accuracy** — fraction of alerts with correct root cause
-- **severity_accuracy** — per alert: 1.0 exact, 0.3 within 1 level, 0.0 otherwise; averaged across all alerts, then scaled by coverage
+- **severity_accuracy** — per alert: 1.0 exact, 0.15 within 1 level, 0.0 otherwise; averaged across all alerts, then scaled by coverage
 - **remediation_accuracy** — fraction of alerts with correct remediation
 - **incident_link_f1** — pair-set F1 over alert groupings; vacuously 1.0 when no true incidents exist
 - **false_alarm_accuracy** — (correctly skipped FAs + correctly triaged real alerts) / total; vacuously 1.0 when no FAs
