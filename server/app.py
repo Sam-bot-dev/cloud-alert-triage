@@ -187,7 +187,7 @@ async def state() -> dict[str, Any]:
     Return the full EnvironmentState including hidden ground truth.
 
     Intended for the evaluation harness and debugging only.
-    The inference agent must NOT call this endpoint — it would give the
+    The inference agent must NOT call this endpoint - it would give the
     agent access to labels it is supposed to infer.
 
     Response
