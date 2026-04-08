@@ -110,9 +110,8 @@ def grade_episode(
     )
 
     # Clamp to strictly open interval (0, 1): never exactly 0.0 or 1.0.
-    # 0.0001 floor ensures even a totally wrong agent gets a non-zero signal.
-    # 0.9999 ceiling ensures no perfect score is possible regardless of task.
-    return round(max(0.0001, min(0.9999, score)), 6)
+    # Use 0.001 as floor and 0.999 as ceiling for safety margins.
+    return round(max(0.001, min(0.999, score)), 6)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
