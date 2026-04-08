@@ -451,7 +451,7 @@ cloud-alert-triage/
           <img src="https://avatars.githubusercontent.com/Sam-bot-dev?s=120" width="120px;" height="120px;" alt="Bhavesh"/>
         </div>
         <div><strong></strong></div>
-        <div><strong>Bhavesh Kumae</strong></div>
+        <div><strong>Bhavesh Kumar</strong></div>
         <a href="https://github.com/Sam-bot-dev">🌐 GitHub</a>
       </td>
       <td align="center" width="25%">
