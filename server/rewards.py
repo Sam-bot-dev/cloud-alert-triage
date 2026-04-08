@@ -15,11 +15,11 @@ Private helpers (importable for unit tests)
     _reward_skip(alert_id, ground_truth_list)                       -> float
     _penalty_budget(step, max_steps)                                -> float
 
-Reward table (master plan Section 8)
+Reward table
 -------------------------------------
   triage — root_cause exact match        -> +0.30
   triage — severity exact match          -> +0.30
-  triage — severity within 1 level       -> +0.30  (not stacked with exact)
+  triage — severity within 1 level       -> +0.15  (partial credit, not stacked with exact)
   triage — remediation exact match       -> +0.20
   triage — incident link bonus           -> +0.10  (alert in incident AND
                                                     agent previously linked it
@@ -116,11 +116,11 @@ def _reward_triage(
     ----------
     +0.30   root_cause exact match
     +0.30   severity exact match          (mutually exclusive with partial below)
-    +0.30   severity within 1 level of correct
+    +0.15   severity within 1 level of correct  (partial credit)
     +0.20   remediation exact match
     +0.10   incident-link bonus (alert in incident AND previously linked correctly)
     ------
-    max     +0.90
+    max     +0.90  (root + exact_sev + rem + link_bonus)
     """
     alert_id = action_dict.get("alert_id")
     gt = _find_gt(alert_id, ground_truth_list)

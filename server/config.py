@@ -28,7 +28,7 @@ REMEDIATION_ACTIONS: list[str] = [
 ]
 
 # Valid action types for the agent
-ACTION_TYPES: list[str] = ["triage", "link_alerts", "skip", "investigate"]
+ACTION_TYPES: list[str] = ["triage", "link_alerts", "skip"]
 
 # Default server port (Hugging Face Spaces standard)
 DEFAULT_PORT: int = 7860
@@ -57,12 +57,3 @@ SEVERITY_ORDER: dict[str, int] = {
 # excluded from the final grader score for deadline safety.
 CASCADE_TRIGGER_STEP: int = 5
 CASCADE_ELIGIBLE_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
-
-# ---------------------------------------------------------------------------
-# Partial Observability (Fix #4)
-# ---------------------------------------------------------------------------
-# If enabled, alert metric_value starts as null and requires investigate action
-# to reveal the actual value. This makes the environment truly sequential.
-PARTIAL_OBSERVABILITY_ENABLED: bool = True  # Enabled for hard mode
-PARTIAL_OBSERVABILITY_TASKS: frozenset[str] = frozenset({"hard"})  # Only hard mode
-INVESTIGATE_REWARD: float = 0.1  # Small positive reward for investigating
