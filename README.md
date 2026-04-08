@@ -398,13 +398,36 @@ cloud-alert-triage/
 
 ## 👨‍💻 Contributors
 
-**Better Call Coders** — OpenEnv Hackathon 2026
-
-| Contributor | GitHub |
-|---|---|
-| Bhavesh Kumar | [@Sam-bot-dev](https://github.com/Sam-bot-dev) |
-| Ubaid Khan | [@notUbaid](https://github.com/notUbaid) |
-| Ved Sharma | [@Destroyerved](https://github.com/Destroyerved) |
+<p align="center">
+  <table>
+    <tr>
+      <td align="center" width="25%">
+        <div>
+          <img src="https://avatars.githubusercontent.com/Sam-bot-dev?s=120" width="120px;" height="120px;" alt="Bhavesh"/>
+        </div>
+        <div><strong></strong></div>
+        <div><strong>Bhavesh Kumar</strong></div>
+        <a href="https://github.com/Sam-bot-dev">🌐 GitHub</a>
+      </td>
+      <td align="center" width="25%">
+        <div>
+          <img src="https://avatars.githubusercontent.com/notUbaid?s=120" width="120px;" height="120px;" alt="Ubaid khan"/>
+        </div>
+        <div><strong></strong></div>
+        <div><strong>Ubaid Khan</strong></div>
+        <a href="https://github.com/notUbaid">🌐 GitHub</a>
+      </td>
+      <td align="center" width="25%">
+        <div>
+          <img src="https://avatars.githubusercontent.com/Destroyerved?s=120" width="120px;" height="120px;" alt="Rohan"/>
+        </div>
+        <div><strong></strong></div>
+        <div><strong> Ved Sharma </strong></div>
+        <a href="https://github.com/Destroyerved">🌐 GitHub</a>
+      </td>
+    </tr>
+  </table>
+</p>
 
 ---
 
