@@ -3,7 +3,9 @@ server/config.py
 All constants, enums, and configuration for the Cloud Alert Triage environment.
 """
 
-# Valid root cause categories for alert classification
+# Valid root cause categories for alert classification.
+# NOTE: "false_alarm" is intentionally excluded — agents must use the "skip"
+# action to dismiss false alarms, not triage them with root_cause="false_alarm".
 ROOT_CAUSE_CATEGORIES: list[str] = [
     "resource_exhaustion",
     "network_failure",
@@ -26,8 +28,10 @@ REMEDIATION_ACTIONS: list[str] = [
     "dismiss",
 ]
 
-# Valid action types for the agent
-ACTION_TYPES: list[str] = ["triage", "link_alerts", "skip", "investigate"]
+# Valid action types for the agent.
+# NOTE: "investigate" is excluded — partial observability is disabled
+# (PARTIAL_OBSERVABILITY_ENABLED = False). Reserved for future use.
+ACTION_TYPES: list[str] = ["triage", "link_alerts", "skip"]
 
 # Default server port (Hugging Face Spaces standard)
 DEFAULT_PORT: int = 7860

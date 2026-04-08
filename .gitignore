@@ -17,7 +17,3 @@ env/
 
 # Logs
 *.log
-output.txt
-
-# Nested project copy
-Meta-OpenEnv/

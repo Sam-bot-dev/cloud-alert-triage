@@ -347,7 +347,7 @@ class TestFullEpisode:
             result = easy_env.step(_triage(alert.alert_id))
         assert "grader_score" in result.info
         assert isinstance(result.info["grader_score"], float)
-        assert 0.0 <= result.info["grader_score"] <= 1.0
+        assert 0.0 < result.info["grader_score"] < 1.0
 
     def test_info_empty_before_done(self, easy_env):
         obs = easy_env.reset("easy", 42)
@@ -436,7 +436,7 @@ class TestState:
             easy_env.step(_triage(alert.alert_id))
         s = easy_env.state()
         assert s.grader_score is not None
-        assert 0.0 <= s.grader_score <= 1.0
+        assert 0.0 < s.grader_score < 1.0
 
     def test_state_cumulative_reward_with_penalty(self, easy_env):
         """Verifies cumulative_reward is tracked via the -0.15 double-triage path."""
@@ -544,6 +544,6 @@ class TestDynamicCascade:
         assert len(state.dynamic_alert_ids) > 0
         score = grade_episode("medium", state.model_dump() if hasattr(state, "model_dump") else state)
         
-        # If dynamic_ids weren't filtered, the coverage and accuracy math would be different 
-        # but we know grade_episode returns successfully
-        assert score >= 0.0
+        # If dynamic_ids weren't filtered, the coverage and accuracy math would be different
+        # but we know grade_episode returns successfully within the open interval
+        assert 0.0 < score < 1.0

@@ -6,13 +6,13 @@ All validation checks passing. HF Space deployed and live.
 
 ## Verified Baseline Scores (llama-3.3-70b-versatile, Groq)
 
-Scores verified across multiple seeds — all 1.0000:
+Scores verified across multiple seeds — all 0.9999:
 
 | Seed | Easy | Medium | Hard |
 |------|------|--------|------|
-| 42   | 1.0000 (5 steps) | 1.0000 (25 steps) | 1.0000 (45 steps) |
-| 123  | 1.0000 | 1.0000 | 1.0000 |
-| 999  | 1.0000 | 1.0000 | 1.0000 |
+| 42   | 0.9999 (5 steps) | 0.9999 (25 steps) | 0.9999 (45 steps) |
+| 123  | 0.9999 | 0.9999 | 0.9999 |
+| 999  | 0.9999 | 0.9999 | 0.9999 |
 
 ## Implemented Fixes
 

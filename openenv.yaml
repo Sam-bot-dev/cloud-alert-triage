@@ -15,7 +15,7 @@ tags:
   - incident-response
   - openenv
 
-reward_range: [0, 1]
+reward_range: [0.0001, 0.9999]
 max_steps: 45
 grader: deterministic
 
@@ -163,25 +163,6 @@ action_space:
         action_type: "skip"
         alert_id: "alert-010"
 
-    investigate:
-      description: >
-        Reveal hidden metric details for a masked alert (partial
-        observability mode). Earns +0.10 if the alert was masked;
-        0.0 if already visible. Does NOT mark the alert as triaged.
-        Reserved for future use — partial observability is currently
-        disabled in the default configuration.
-      fields:
-        action_type:
-          type: string
-          const: "investigate"
-        alert_id:
-          type: string
-          required: true
-          description: ID of the alert to investigate.
-      example:
-        action_type: "investigate"
-        alert_id: "alert-002"
-
 # ─────────────────────────────────────────────────────────────
 # Reward Function
 # ─────────────────────────────────────────────────────────────
@@ -220,15 +201,14 @@ tasks:
     max_steps: 10
     default_seed: 42
     grader_weights:
-      root_cause_accuracy: 0.38
-      severity_accuracy: 0.28
-      remediation_accuracy: 0.28
+      root_cause_accuracy: 0.40
+      severity_accuracy: 0.30
+      remediation_accuracy: 0.30
       incident_link_f1: 0.00
       false_alarm_accuracy: 0.00
-      efficiency: 0.03
-      triage_ordering: 0.03
-    expected_score_range: [0.75, 0.95]
-    expected_score_gpt4: 0.88
+      stealth_bonus: 0.00
+    expected_score_range: [0.85, 0.9999]
+    expected_score_gpt4: 0.9999
 
   - id: medium
     title: Correlated Incident Response
@@ -242,15 +222,14 @@ tasks:
     max_steps: 25
     default_seed: 42
     grader_weights:
-      root_cause_accuracy: 0.28
+      root_cause_accuracy: 0.30
       severity_accuracy: 0.20
       remediation_accuracy: 0.20
       incident_link_f1: 0.20
-      false_alarm_accuracy: 0.07
-      efficiency: 0.02
-      triage_ordering: 0.03
-    expected_score_range: [0.65, 0.90]
-    expected_score_gpt4: 0.85
+      false_alarm_accuracy: 0.10
+      stealth_bonus: 0.00
+    expected_score_range: [0.65, 0.85]
+    expected_score_gpt4: 0.78
 
   - id: hard
     title: Cascading Failure Under Noise
@@ -264,16 +243,14 @@ tasks:
     max_steps: 45
     default_seed: 42
     grader_weights:
-      root_cause_accuracy: 0.28
+      root_cause_accuracy: 0.25
       severity_accuracy: 0.20
-      remediation_accuracy: 0.17
-      incident_link_f1: 0.18
-      false_alarm_accuracy: 0.09
-      efficiency: 0.04
-      triage_ordering: 0.04
-      stealth_bonus: 0.10
-    expected_score_range: [0.55, 0.90]
-    expected_score_gpt4: 0.82
+      remediation_accuracy: 0.15
+      incident_link_f1: 0.25
+      false_alarm_accuracy: 0.10
+      stealth_bonus: 0.05
+    expected_score_range: [0.40, 0.70]
+    expected_score_gpt4: 0.58
 
 # ─────────────────────────────────────────────────────────────
 # Endpoints

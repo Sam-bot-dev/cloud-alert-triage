@@ -19,7 +19,7 @@ _WEIGHTS: dict[str, dict[str, float]] = {
 _STEALTH_BONUS: dict[str, float] = {
     "easy": 0.00,
     "medium": 0.00,
-    "hard": 0.10,
+    "hard": 0.05,
 }
 
 
@@ -32,12 +32,15 @@ def grade_episode(
     final_state_dict: dict[str, Any],
 ) -> float:
     """
-    Compute a [0.0, 1.0] episode score based on weighted accuracy components.
+    Compute a strictly open-interval (0.0001, 0.9999) episode score based on
+    weighted accuracy components.
+
+    The score is always clamped to [0.0001, 0.9999] — never exactly 0 or 1 —
+    as required by the OpenEnv hackathon scoring contract.
 
     Dynamic alerts (spawned by the cascade mechanic at runtime) are
     **excluded** from the grader's ground-truth set so the final score
-    reflects only the original scenario alerts.  This is the safe-for-
-    deadline policy documented in task.txt.
+    reflects only the original scenario alerts.
     """
 
     if task_id not in _WEIGHTS:
@@ -82,7 +85,7 @@ def grade_episode(
 
     # Coverage penalty (prevents skipping most alerts)
     coverage = len(decisions_by_id) / len(ground_truth) if ground_truth else 1.0
-    coverage_penalty = max(0.05, coverage ** 1.5)
+    coverage_penalty = coverage ** 1.5
 
     score = base_score * coverage_penalty
 
@@ -91,8 +94,10 @@ def grade_episode(
         decisions_by_id, ground_truth, incidents
     )
 
-    _EPS = 1e-4
-    return round(max(_EPS, min(1.0 - _EPS, score)), 6)
+    # Clamp to strictly open interval (0, 1): never exactly 0.0 or 1.0.
+    # 0.0001 floor ensures even a totally wrong agent gets a non-zero signal.
+    # 0.9999 ceiling ensures no perfect score is possible regardless of task.
+    return round(max(0.0001, min(0.9999, score)), 6)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

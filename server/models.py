@@ -31,7 +31,6 @@ class Alert(BaseModel):
     metric: str                             # e.g. "cpu_usage_percent"
     metric_value: float | None = None       # observed value (None if masked)
     threshold: float                        # threshold that was breached
-    metric_history: list[float] | None = None  # 5-point rolling window [t-4..t-0 min]
     message: str                            # human-readable alert text
     context: str | None = None              # optional extra context (recent deploy, etc.)
     triaged: bool = False                   # True once the agent has acted on this alert
@@ -191,7 +190,6 @@ class EnvironmentState(BaseModel):
     cumulative_reward: float
     grader_score: float | None = None      # populated at episode end
     dynamic_alert_ids: set[str] = set()    # inserted in Phase B
-    triage_order: list[str] = []           # order in which alerts were triaged/skipped
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +199,8 @@ class EnvironmentState(BaseModel):
 class ResetRequest(BaseModel):
     """Request body for POST /reset."""
 
-    task_id: str | None = "easy"
-    seed: int | None = 42
+    task_id: str = "easy"
+    seed: int = 42
 
 
 # ---------------------------------------------------------------------------

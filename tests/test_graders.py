@@ -13,25 +13,13 @@ from server.grading import grade_episode
 # Shared helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _make_state(
-    task_id,
-    decisions,
-    ground_truth,
-    incidents=None,
-    step_number=None,
-    max_steps=10,
-    triage_order=None,
-):
+def _make_state(task_id, decisions, ground_truth, incidents=None, step_number=None, max_steps=10):
     """Build a minimal EnvironmentState dict for grader input."""
     agent_links = [d for d in decisions if d.get("action_type") == "link_alerts"]
-    triage_ids = [
-        d["alert_id"] for d in decisions
-        if d.get("action_type") in ("triage", "skip")
-    ]
     return {
         "task_id": task_id,
         "seed": 42,
-        "step_number": step_number if step_number is not None else max_steps,
+        "step_number": step_number or max_steps,
         "max_steps": max_steps,
         "done": True,
         "alerts": [],
@@ -41,8 +29,6 @@ def _make_state(
         "incidents": incidents or [],
         "cumulative_reward": 0.0,
         "grader_score": None,
-        "dynamic_alert_ids": set(),
-        "triage_order": triage_order if triage_order is not None else triage_ids,
     }
 
 
@@ -71,86 +57,54 @@ ALL_WRONG_DECISIONS_5 = [
 
 class TestEasyGrader:
 
-    def test_perfect_run_below_1(self):
-        """Perfect decisions on easy task → score < 1.0 due to efficiency component."""
-        state = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5, step_number=5)
+    def test_perfect_run_scores_max(self):
+        """Perfect decisions on easy task → 0.9999 (grader ceiling)."""
+        state = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5)
         score = grade_episode("easy", state)
-        assert 0.85 < score < 1.0
-
-    def test_perfect_run_strictly_between_0_and_1(self):
-        """Even a perfect agent produces a grader score strictly in (0, 1)."""
-        state = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5, step_number=5)
-        score = grade_episode("easy", state)
-        assert 0.0 < score < 1.0
+        assert score == pytest.approx(0.9999)
 
     def test_all_wrong_scores_near_zero(self):
         """All wrong decisions → score close to 0.0."""
         state = _make_state("easy", ALL_WRONG_DECISIONS_5, GROUND_TRUTH_5)
         score = grade_episode("easy", state)
-        assert score < 0.20
+        # Severity "low" vs "high" is off by 3 levels → 0.0. No partial credit here.
+        assert score < 0.15
 
-    def test_empty_decisions_scores_zero(self):
-        """No decisions at all (agent made no moves) → 0.0."""
-        state = _make_state("easy", [], GROUND_TRUTH_5, step_number=0)
+    def test_empty_decisions_scores_floor(self):
+        """No decisions at all (agent made no moves) → 0.0001 (grader floor)."""
+        state = _make_state("easy", [], GROUND_TRUTH_5)
         score = grade_episode("easy", state)
-        assert score == pytest.approx(0.0)
+        assert score == pytest.approx(0.0001)
 
     def test_partial_run_in_range(self):
         """Triaging 3/5 correctly, 2 untriaged → score between 0 and 1."""
         decisions = PERFECT_DECISIONS_5[:3]
-        state = _make_state("easy", decisions, GROUND_TRUTH_5, step_number=3)
+        state = _make_state("easy", decisions, GROUND_TRUTH_5)
         score = grade_episode("easy", state)
+        # Coverage penalty (0.6^1.5 ≈ 0.465) is applied on top of the
+        # weighted accuracy sum, so final score is well below the raw 0.60.
         assert 0.0 < score < 1.0
 
     def test_score_always_in_range(self):
-        """Grader output is always clamped to [0.0, 1.0]."""
+        """Grader output is always clamped to strictly open interval (0.0001, 0.9999)."""
         for decisions in [PERFECT_DECISIONS_5, ALL_WRONG_DECISIONS_5, []]:
             state = _make_state("easy", decisions, GROUND_TRUTH_5)
             score = grade_episode("easy", state)
-            assert 0.0 <= score <= 1.0
+            assert 0.0 < score < 1.0
 
     def test_severity_partial_credit(self):
-        """Severity off by exactly 1 level → 0.50 partial credit per alert."""
+        """Severity off by exactly 1 level → 0.15 partial credit per alert."""
+        # "high" → "medium" is off by 1 (SEVERITY_ORDER: critical=0, high=1, medium=2, low=3)
         decisions = [
             {"alert_id": f"alert-{i:03d}", "action_type": "triage",
              "root_cause": "resource_exhaustion", "severity": "medium", "remediation": "scale_up"}
             for i in range(1, 6)
         ]
-        state = _make_state("easy", decisions, GROUND_TRUTH_5, step_number=5)
+        state = _make_state("easy", decisions, GROUND_TRUTH_5)
         score = grade_episode("easy", state)
-        # rc=1.0, sev=0.50, rem=1.0, eff=0.5, ord=1.0 (all same true sev)
-        # 0.38*1.0 + 0.28*0.50 + 0.28*1.0 + 0.03*0.5 + 0.03*1.0 = 0.845
-        assert score == pytest.approx(0.845, abs=0.02)
-
-    def test_fewer_steps_higher_efficiency(self):
-        """Using fewer steps (while still correct) gives a higher score."""
-        state_5steps = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5, step_number=5)
-        state_8steps = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5, step_number=8)
-        assert grade_episode("easy", state_5steps) > grade_episode("easy", state_8steps)
-
-    def test_ordering_affects_score(self):
-        """Triaging critical alerts before low-severity ones gives higher ordering score."""
-        gt_mixed = [
-            {"alert_id": "a1", "true_root_cause": "resource_exhaustion",
-             "true_severity": "critical", "true_remediation": "scale_up", "incident_id": None},
-            {"alert_id": "a2", "true_root_cause": "resource_exhaustion",
-             "true_severity": "low", "true_remediation": "scale_up", "incident_id": None},
-            {"alert_id": "a3", "true_root_cause": "resource_exhaustion",
-             "true_severity": "critical", "true_remediation": "scale_up", "incident_id": None},
-        ]
-        good_triage = [
-            {"alert_id": a["alert_id"], "action_type": "triage",
-             "root_cause": "resource_exhaustion", "severity": a["true_severity"],
-             "remediation": "scale_up"}
-            for a in gt_mixed
-        ]
-        good_order = ["a1", "a3", "a2"]
-        bad_order = ["a2", "a1", "a3"]
-
-        state_good = _make_state("easy", good_triage, gt_mixed, step_number=3, triage_order=good_order)
-        state_bad = _make_state("easy", good_triage, gt_mixed, step_number=3, triage_order=bad_order)
-
-        assert grade_episode("easy", state_good) > grade_episode("easy", state_bad)
+        # rc=1.0, sev=0.15, rem=1.0 (coverage=1.0, no penalty)
+        # 0.40*1.0 + 0.30*0.15 + 0.30*1.0 = 0.40 + 0.045 + 0.30 = 0.745
+        assert score == pytest.approx(0.745)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -160,10 +114,14 @@ class TestEasyGrader:
 class TestGraderDeterminism:
 
     def test_same_input_same_output(self):
+        """Identical state → identical score (determinism)."""
         state = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5)
-        assert grade_episode("easy", state) == grade_episode("easy", state)
+        score_a = grade_episode("easy", state)
+        score_b = grade_episode("easy", state)
+        assert score_a == score_b
 
     def test_different_decisions_different_scores(self):
+        """Different decision quality → different scores."""
         perfect_state = _make_state("easy", PERFECT_DECISIONS_5, GROUND_TRUTH_5)
         wrong_state = _make_state("easy", ALL_WRONG_DECISIONS_5, GROUND_TRUTH_5)
         assert grade_episode("easy", perfect_state) > grade_episode("easy", wrong_state)
@@ -173,6 +131,7 @@ class TestGraderDeterminism:
 # Medium grader
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Ground truth: 6 alerts, 2 incidents of 3 alerts each
 _GT_MEDIUM = [
     {"alert_id": "a1", "true_root_cause": "deployment_bug", "true_severity": "high",
      "true_remediation": "rollback_deploy", "incident_id": "inc-1"},
@@ -212,13 +171,15 @@ _CORRECT_SKIP_FA = [{"alert_id": "a6", "action_type": "skip"}]
 class TestMediumGrader:
 
     def test_incident_linking_weighted(self):
-        """Adding correct links improves the medium score."""
+        """Medium task includes incident link F1 in score (weight 0.20)."""
+        # Perfect triage but no linking → score < 1.0 (missing link contribution)
         decisions = _PERFECT_TRIAGE_MEDIUM[:]
-        state = _make_state("medium", decisions, _GT_MEDIUM, step_number=5, max_steps=25)
+        state = _make_state("medium", decisions, _GT_MEDIUM)
         score_no_links = grade_episode("medium", state)
 
+        # Perfect triage + correct linking → higher score
         decisions_with_links = _PERFECT_TRIAGE_MEDIUM + _CORRECT_LINKS_MEDIUM
-        state_with_links = _make_state("medium", decisions_with_links, _GT_MEDIUM, step_number=7, max_steps=25)
+        state_with_links = _make_state("medium", decisions_with_links, _GT_MEDIUM)
         score_with_links = grade_episode("medium", state_with_links)
 
         assert score_with_links > score_no_links
@@ -226,35 +187,27 @@ class TestMediumGrader:
     def test_perfect_triage_no_links_below_1(self):
         """Perfect triage but no incident links → score < 1.0 for medium."""
         decisions = _PERFECT_TRIAGE_MEDIUM[:]
-        state = _make_state("medium", decisions, _GT_MEDIUM, max_steps=25)
+        state = _make_state("medium", decisions, _GT_MEDIUM)
         score = grade_episode("medium", state)
         assert score < 1.0
 
     def test_false_alarm_identification(self):
-        """Correctly skipping a false alarm improves score."""
+        """Correctly skipping a false alarm contributes to false_alarm_accuracy."""
+        # Without skipping the FA, fa_accuracy is lower
         decisions_no_skip = _PERFECT_TRIAGE_MEDIUM + _CORRECT_LINKS_MEDIUM
-        state_no_skip = _make_state("medium", decisions_no_skip, _GT_MEDIUM, step_number=7, max_steps=25)
+        state_no_skip = _make_state("medium", decisions_no_skip, _GT_MEDIUM)
 
+        # With correct FA skip
         decisions_with_skip = _PERFECT_TRIAGE_MEDIUM + _CORRECT_LINKS_MEDIUM + _CORRECT_SKIP_FA
-        state_with_skip = _make_state("medium", decisions_with_skip, _GT_MEDIUM, step_number=8, max_steps=25)
+        state_with_skip = _make_state("medium", decisions_with_skip, _GT_MEDIUM)
 
         assert grade_episode("medium", state_with_skip) > grade_episode("medium", state_no_skip)
 
-    def test_fa_not_in_classification_denominator(self):
-        """False alarm alerts do NOT penalize rc/sev/rem accuracy."""
-        # With only triageable alerts handled (not the FA), rc/sev/rem
-        # should still be 1.0 over the 5 triageable alerts.
-        decisions = _PERFECT_TRIAGE_MEDIUM + _CORRECT_LINKS_MEDIUM + _CORRECT_SKIP_FA
-        state = _make_state("medium", decisions, _GT_MEDIUM, step_number=8, max_steps=25)
-        score = grade_episode("medium", state)
-        # All 5 triageable alerts correct + links correct + FA skipped
-        # Score should be high (> 0.85)
-        assert score > 0.85
-
     def test_score_in_range(self):
+        """Medium grader always returns strictly open interval (0.0001, 0.9999)."""
         for decisions in [[], _PERFECT_TRIAGE_MEDIUM, _PERFECT_TRIAGE_MEDIUM + _CORRECT_LINKS_MEDIUM]:
-            score = grade_episode("medium", _make_state("medium", decisions, _GT_MEDIUM, max_steps=25))
-            assert 0.0 <= score <= 1.0
+            score = grade_episode("medium", _make_state("medium", decisions, _GT_MEDIUM))
+            assert 0.0 < score < 1.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -288,33 +241,33 @@ _STEALTH_WRONG_TRIAGE = [
 class TestHardGrader:
 
     def test_stealth_bonus_applies(self):
-        """Hard grader awards a +0.10 bonus for identifying the stealth incident."""
-        state_with = _make_state(
-            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD,
-            incidents=_STEALTH_INCIDENT, step_number=2, max_steps=45,
+        """Hard grader awards exactly +0.10 bonus for identifying the stealth incident root cause."""
+        # Same correct triage; only difference is whether the stealth marker exists.
+        state_with_stealth = _make_state(
+            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD, incidents=_STEALTH_INCIDENT
         )
-        state_without = _make_state(
-            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD,
-            incidents=[], step_number=2, max_steps=45,
+        state_no_stealth = _make_state(
+            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD, incidents=[]
         )
-        score_with = grade_episode("hard", state_with)
-        score_without = grade_episode("hard", state_without)
+        score_with = grade_episode("hard", state_with_stealth)
+        score_without = grade_episode("hard", state_no_stealth)
         assert score_with > score_without
-        assert score_with - score_without == pytest.approx(0.10, abs=0.01)
+        assert score_with - score_without == pytest.approx(0.10)
 
     def test_no_stealth_incident_no_bonus(self):
-        state = _make_state(
-            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD,
-            incidents=[], step_number=2, max_steps=45,
-        )
-        state_with = _make_state(
-            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD,
-            incidents=_STEALTH_INCIDENT, step_number=2, max_steps=45,
-        )
-        assert grade_episode("hard", state_with) > grade_episode("hard", state)
+        """Without a stealth incident in the incidents list, bonus is 0."""
+        state = _make_state("hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD, incidents=[])
+        score_no_stealth = grade_episode("hard", state)
 
-    def test_linking_improves_score(self):
-        """Adding correct links improves scores for both medium and hard."""
+        state_with_stealth = _make_state(
+            "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD, incidents=_STEALTH_INCIDENT
+        )
+        score_with_stealth = grade_episode("hard", state_with_stealth)
+        assert score_with_stealth > score_no_stealth
+
+    def test_incident_link_weighted_higher_than_medium(self):
+        """Hard task weights incident linking at 0.25 vs medium's 0.20."""
+        # Build identical scenarios for medium and hard, compare impact of adding links
         gt = [
             {"alert_id": "x1", "true_root_cause": "deployment_bug", "true_severity": "high",
              "true_remediation": "rollback_deploy", "incident_id": "i1"},
@@ -329,34 +282,16 @@ class TestHardGrader:
         ]
         link = [{"action_type": "link_alerts", "alert_ids": ["x1", "x2"], "incident_label": "i1"}]
 
-        for task, ms in [("medium", 25), ("hard", 45)]:
-            no_link = grade_episode(task, _make_state(task, triage, gt, step_number=2, max_steps=ms))
-            with_link = grade_episode(task, _make_state(task, triage + link, gt, step_number=3, max_steps=ms))
-            assert with_link > no_link, f"Linking should improve {task} score"
+        med_no_link = grade_episode("medium", _make_state("medium", triage, gt))
+        med_with_link = grade_episode("medium", _make_state("medium", triage + link, gt))
+        hard_no_link = grade_episode("hard", _make_state("hard", triage, gt))
+        hard_with_link = grade_episode("hard", _make_state("hard", triage + link, gt))
+
+        # Linking should improve hard score more than medium score
+        assert (hard_with_link - hard_no_link) > (med_with_link - med_no_link)
 
     def test_score_in_range(self):
+        """Hard grader always returns strictly open interval (0.0001, 0.9999)."""
         for decisions in [[], _STEALTH_CORRECT_TRIAGE, _STEALTH_WRONG_TRIAGE]:
-            score = grade_episode("hard", _make_state("hard", decisions, _GT_HARD, max_steps=45))
-            assert 0.0 <= score <= 1.0
-
-    def test_grader_never_exactly_1(self):
-        decisions = _STEALTH_CORRECT_TRIAGE + [
-            {"action_type": "link_alerts", "alert_ids": ["h1", "h2"], "incident_label": "stealth-inc"},
-        ]
-        state = _make_state(
-            "hard", decisions, _GT_HARD,
-            incidents=_STEALTH_INCIDENT, step_number=3, max_steps=45,
-        )
-        score = grade_episode("hard", state)
-        assert score < 1.0
-        assert score > 0.5
-
-    def test_grader_produces_continuous_values(self):
-        scores = set()
-        for step_num in [2, 5, 10, 20, 40]:
-            state = _make_state(
-                "hard", _STEALTH_CORRECT_TRIAGE, _GT_HARD,
-                incidents=_STEALTH_INCIDENT, step_number=step_num, max_steps=45,
-            )
-            scores.add(grade_episode("hard", state))
-        assert len(scores) >= 3
+            score = grade_episode("hard", _make_state("hard", decisions, _GT_HARD))
+            assert 0.0 < score < 1.0

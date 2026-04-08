@@ -448,7 +448,7 @@ class TestFullEpisode:
         assert done is True
 
     def test_episode_done_info_has_grader_score(self, client):
-        """When done=True, info must contain grader_score in [0, 1]."""
+        """When done=True, info must contain grader_score in (0, 1) exclusive."""
         resp = client.post("/reset", json={"task_id": "easy", "seed": 42})
         alerts = resp.json()["observation"]["alerts"]
 
@@ -464,7 +464,7 @@ class TestFullEpisode:
 
         assert "grader_score" in data.get("info", {})
         score = data["info"]["grader_score"]
-        assert 0.0 <= score <= 1.0
+        assert 0.0 < score < 1.0
 
     def test_step_after_done_returns_done_true(self, client):
         """Steps after episode end return done=True and reward=0."""

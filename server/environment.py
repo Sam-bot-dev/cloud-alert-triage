@@ -103,8 +103,6 @@ class AlertTriageEnv:
         self._done: bool = False
         self._cumulative_reward: float = 0.0
         self._grader_score: float | None = None
-        # Triage ordering: track the sequence of alert_ids as they are triaged/skipped
-        self._triage_order: list[str] = []
         # Dynamic cascade state
         self._dynamic_alert_ids: set[str] = set()
         self._spawned_from: set[str] = set()
@@ -158,7 +156,6 @@ class AlertTriageEnv:
         self._done = False
         self._cumulative_reward = 0.0
         self._grader_score = None
-        self._triage_order = []
         # Dynamic cascade: track which alerts are original vs spawned
         self._original_alert_ids = {a.alert_id for a in self._alerts}
         self._dynamic_alert_ids = set()
@@ -267,7 +264,6 @@ class AlertTriageEnv:
             cumulative_reward=self._cumulative_reward,
             grader_score=self._grader_score,
             dynamic_alert_ids=set(self._dynamic_alert_ids),
-            triage_order=list(self._triage_order),
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -342,7 +338,6 @@ class AlertTriageEnv:
         alert.triaged = True
         alert.agent_decision = decision
         self._agent_decisions.append(decision)
-        self._triage_order.append(action.alert_id)
 
         # compute_reward now includes budget pressure via _penalty_budget().
         # Do NOT add self._budget_penalty() here — that would double-count it.
@@ -399,7 +394,6 @@ class AlertTriageEnv:
         alert.triaged = True
         alert.agent_decision = decision
         self._agent_decisions.append(decision)
-        self._triage_order.append(action.alert_id)
 
         reward = compute_reward(decision, self._ground_truth, self._make_state_snapshot())
 
@@ -413,45 +407,20 @@ class AlertTriageEnv:
         """
         Mark done when all alerts are triaged (or skipped) OR the step budget
         is exhausted.  On transition to done, call the grader.
-
-        The grader is wrapped in a try-except so that any unexpected exception
-        during scoring still produces a valid (0, 1) score rather than leaving
-        the episode without a grader_score or crashing the API endpoint.
         """
         all_triaged = all(a.triaged for a in self._alerts)
         budget_gone = self._step_count >= self._max_steps
 
         if (all_triaged or budget_gone) and not self._done:
             self._done = True
-            try:
-                raw_score = grade_episode(
-                    self._task_id, self._make_state_snapshot()
-                )
-                # Double-enforce: score must be strictly in (0, 1)
-                import math
-                if not math.isfinite(raw_score) or raw_score <= 0 or raw_score >= 1:
-                    raw_score = max(0.0001, min(0.9999, raw_score if math.isfinite(raw_score) else 0.5))
-                self._grader_score = round(raw_score, 4)
-            except Exception:
-                # Fallback: safe midpoint ensures info["grader_score"] is always present
-                self._grader_score = 0.5
+            self._grader_score = grade_episode(
+                self._task_id, self._make_state_snapshot()
+            )
 
     def _make_info(self) -> dict[str, Any]:
-        """Return info dict; includes grader_score only once done.
-
-        grader_score is guaranteed to be in the open interval (0, 1) —
-        never exactly 0.0 or 1.0 — by triple enforcement:
-          1. grading.py clamps before returning
-          2. _update_done clamps after calling grade_episode
-          3. Here we apply a final guard before serialising
-        """
-        if self._done:
-            import math
-            score = self._grader_score if self._grader_score is not None else 0.5
-            if not math.isfinite(score):
-                score = 0.5
-            score = round(max(0.0001, min(0.9999, score)), 4)
-            return {"grader_score": score}
+        """Return info dict; includes grader_score only once done."""
+        if self._done and self._grader_score is not None:
+            return {"grader_score": self._grader_score}
         return {}
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -586,7 +555,6 @@ class AlertTriageEnv:
             "agent_decisions":   self._agent_decisions,
             "cumulative_reward": self._cumulative_reward,
             "dynamic_alert_ids": self._dynamic_alert_ids,
-            "triage_order":      list(self._triage_order),
         }
 
     # ─────────────────────────────────────────────────────────────────────────

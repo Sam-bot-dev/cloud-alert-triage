@@ -127,8 +127,8 @@ def main() -> int:
     grader_score = final_data.get("info", {}).get("grader_score")
     if grader_score is not None:
         check(
-            "grader_score in [0.0, 1.0]",
-            0.0 <= grader_score <= 1.0,
+            "grader_score in (0.0, 1.0) exclusive",
+            0.0 < grader_score < 1.0,
             f"score={grader_score}",
         )
 
