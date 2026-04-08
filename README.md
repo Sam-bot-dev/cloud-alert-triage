@@ -208,7 +208,7 @@ All actions share one model with an `action_type` discriminator.
 
 | Field | Valid values |
 |---|---|
-| `root_cause` | `resource_exhaustion` · `network_failure` · `deployment_bug` · `config_error` · `dependency_outage` · `false_alarm` |
+| `root_cause` | `resource_exhaustion` · `network_failure` · `deployment_bug` · `config_error` · `dependency_outage` |
 | `severity` | `critical` · `high` · `medium` · `low` |
 | `remediation` | `restart_service` · `scale_up` · `rollback_deploy` · `fix_config` · `escalate_to_team` · `acknowledge_and_monitor` · `dismiss` |
 

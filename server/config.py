@@ -10,7 +10,6 @@ ROOT_CAUSE_CATEGORIES: list[str] = [
     "deployment_bug",
     "config_error",
     "dependency_outage",
-    "false_alarm",
 ]
 
 # Severity levels (ordered from most to least severe)
