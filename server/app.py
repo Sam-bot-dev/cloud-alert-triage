@@ -133,17 +133,6 @@ async def reset(body: ResetRequest | None = None) -> dict[str, Any]:
 
     Defaults to task_id="easy", seed=42 if not provided.
     """
-
-    Response
-    --------
-    {
-        "observation": { ...Observation fields... }
-    }
-
-    Errors
-    ------
-    422  unknown task_id
-    """
     task_id = body.task_id if body else "easy"
     seed = body.seed if body else 42
     observation = env.reset(task_id, seed)
@@ -187,7 +176,7 @@ async def state() -> dict[str, Any]:
     Return the full EnvironmentState including hidden ground truth.
 
     Intended for the evaluation harness and debugging only.
-    The inference agent must NOT call this endpoint - it would give the
+    The inference agent must NOT call this endpoint — it would give the
     agent access to labels it is supposed to infer.
 
     Response
