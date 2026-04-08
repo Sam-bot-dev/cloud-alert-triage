@@ -10,6 +10,14 @@ An AI-powered SRE agent that detects cascading failures, links related alerts, a
 ✔ Identifies stealth root causes under noisy signals  
 ✔ Achieves 1.0000 score across all tasks (deterministic & reproducible)
 
+## 🧠 Key Capabilities
+
+- Root-cause reasoning across service dependencies  
+- Incident grouping via alert correlation  
+- Dynamic adaptation to cascading failures  
+- Noise filtering and false alarm detection  
+- Deterministic, reproducible decision-making
+
 ---
 
 ## 🎯 Why This Domain
