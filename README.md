@@ -450,23 +450,23 @@ cloud-alert-triage/
         <div>
           <img src="https://avatars.githubusercontent.com/Sam-bot-dev?s=120" width="120px;" height="120px;" alt="Bhavesh"/>
         </div>
-        <div><strong>🧩 Head Teammate</strong></div>
-        <div><strong>Bhavesh</strong></div>
+        <div><strong></strong></div>
+        <div><strong>Bhavesh Kumae</strong></div>
         <a href="https://github.com/Sam-bot-dev">🌐 GitHub</a>
       </td>
       <td align="center" width="25%">
         <div>
           <img src="https://avatars.githubusercontent.com/notUbaid?s=120" width="120px;" height="120px;" alt="Ubaid khan"/>
         </div>
-        <div><strong>⭐ Team Leader</strong></div>
-        <div><strong>Ubaid khan</strong></div>
+        <div><strong></strong></div>
+        <div><strong>Ubaid Khan</strong></div>
         <a href="https://github.com/notUbaid">🌐 GitHub</a>
       </td>
       <td align="center" width="25%">
         <div>
           <img src="https://avatars.githubusercontent.com/Destroyerved?s=120" width="120px;" height="120px;" alt="Rohan"/>
         </div>
-        <div><strong>Architecture Design</strong></div>
+        <div><strong></strong></div>
         <div><strong> Ved Sharma </strong></div>
         <a href="https://github.com/Destroyerved">🌐 GitHub</a>
       </td>
