@@ -1,3 +1,12 @@
+---
+title: CloudAlert Triage AI
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Cloud Alert Triage — OpenEnv Environment
 
 > **Meta × PyTorch × Hugging Face OpenEnv Hackathon 2026 · Better Call Coders**
