@@ -2,6 +2,16 @@
 
 > **Meta × PyTorch × Hugging Face OpenEnv Hackathon 2026 · Better Call Coders**
 
+## 🚀 TL;DR
+
+An AI-powered SRE agent that detects cascading failures, links related alerts, and takes optimal remediation actions in a dynamic cloud environment.
+
+✔ Handles multi-hop incident chains  
+✔ Identifies stealth root causes under noisy signals  
+✔ Achieves 1.0000 score across all tasks (deterministic & reproducible)
+
+---
+
 An SRE alert triage environment where an AI agent must classify, correlate, and remediate cloud infrastructure alerts across a realistic 17-service microservice graph — under time pressure, with injected noise, stealth failures, and a live cascade mechanic that punishes delay.
 
 ---
